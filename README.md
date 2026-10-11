@@ -65,6 +65,20 @@ tccutil reset ScreenCapture com.joebentaylor.oneshot
 
 Signing with an Apple Development certificate avoids this (see the top of `build.sh`).
 
+## Updates
+
+Oneshot updates itself from this repo. It keeps its own clone in
+`~/Library/Application Support/Oneshot/Source`, checks GitHub on launch and every 30 minutes,
+and when there's a new commit on `main`:
+
+- shows **Install Update** in the menu bar menu, and
+- if **Install Updates Automatically** is on (the default) and you're not recording or editing,
+  pulls, builds with your Xcode, and relaunches on its own.
+
+Builds are signed with the same local certificate, so Screen Recording permission carries over.
+The update log is at `~/Library/Logs/Oneshot/update.log` (menu › Show Update Log after a failure).
+Needs Xcode (or its command line tools) and `git` access to the repo on that Mac.
+
 ## Where things go
 
 ```

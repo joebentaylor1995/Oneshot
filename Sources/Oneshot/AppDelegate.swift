@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var editors: [EditorWindowController] = []
     private var hotKey: HotKey?
     private var hasRequestedScreenAccess = false
+    private let updater = Updater()
 
     // MARK: Preferences
 
@@ -58,6 +59,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // ⌘⇧2 starts an area recording, or stops the current one.
         hotKey = HotKey(keyCode: kVK_ANSI_2, modifiers: cmdKey | shiftKey) { [weak self] in
             self?.hotKeyPressed()
+        }
+
+        updater.isBusy = { [weak self] in
+            guard let self else { return true }
+            return self.session != nil || self.isStarting || !self.editors.isEmpty
+        }
+        updater.onChange = { [weak self] in self?.updaterStateChanged() }
+        if let message = updater.consumeJustUpdatedMessage() {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                NSApp.activate()
+                let alert = NSAlert()
+                alert.messageText = "Oneshot was updated"
+                alert.informativeText = message
+                alert.runModal()
+            }
+        }
+        updater.start()
+    }
+
+    private func updaterStateChanged() {
+        guard session == nil else { return }
+        if case .updating = updater.state {
+            showSavingState()
+            statusItem.button?.toolTip = "Updating Oneshot…"
+            statusItem.menu = menu
         }
     }
 
@@ -128,7 +155,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(recentItem)
         menu.addItem(item("Open Oneshot Folder", #selector(openFolder)))
         menu.addItem(.separator())
+        addUpdateItems(to: menu)
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Oneshot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    }
+
+    private func addUpdateItems(to menu: NSMenu) {
+        switch updater.state {
+        case .available(let count, let summary):
+            let install = item("Install Update (\(count) new change\(count == 1 ? "" : "s"))…", #selector(installUpdate))
+            install.attributedTitle = NSAttributedString(string: install.title, attributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)])
+            if !summary.isEmpty { install.toolTip = "Latest: \(summary)" }
+            menu.addItem(install)
+        case .updating:
+            let busy = NSMenuItem(title: "Updating… Oneshot will restart when ready", action: nil, keyEquivalent: "")
+            busy.isEnabled = false
+            menu.addItem(busy)
+        case .failed(let message):
+            let failed = NSMenuItem(title: message, action: nil, keyEquivalent: "")
+            failed.isEnabled = false
+            menu.addItem(failed)
+            menu.addItem(item("Show Update Log", #selector(showUpdateLog)))
+        case .checking:
+            let checking = NSMenuItem(title: "Checking for updates…", action: nil, keyEquivalent: "")
+            checking.isEnabled = false
+            menu.addItem(checking)
+        case .idle, .upToDate:
+            break
+        }
+        if updater.state != .updating && updater.state != .checking {
+            menu.addItem(item("Check for Updates", #selector(checkForUpdates)))
+        }
+        let auto = item("Install Updates Automatically", #selector(toggleAutoUpdate))
+        auto.state = updater.installsAutomatically ? .on : .off
+        menu.addItem(auto)
+        let version = NSMenuItem(title: "Version \(updater.shortVersion)", action: nil, keyEquivalent: "")
+        version.isEnabled = false
+        menu.addItem(version)
+    }
+
+    @objc private func checkForUpdates() {
+        Task { await updater.check(userInitiated: true) }
+    }
+
+    @objc private func toggleAutoUpdate() {
+        updater.installsAutomatically.toggle()
+    }
+
+    @objc private func showUpdateLog() {
+        updater.showLog()
+    }
+
+    @objc private func installUpdate() {
+        guard session == nil, !isStarting else { return }
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Install the update?"
+        alert.informativeText = "Oneshot will build the new version (usually under a minute) and restart. Open editors are saved and closed."
+        alert.addButton(withTitle: "Install")
+        alert.addButton(withTitle: "Not Now")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        for editor in editors { editor.window?.close() }
+        updater.install()
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {

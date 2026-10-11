@@ -36,6 +36,11 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# Stamp the build with its commit so the in-app updater knows which version this is.
+COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+SUBJECT="$(git log -1 --format=%s 2>/dev/null || true)"
+plutil -insert OneshotCommit -string "$COMMIT" "$APP/Contents/Info.plist"
+plutil -insert OneshotCommitSubject -string "$SUBJECT" "$APP/Contents/Info.plist"
 cp Resources/MenuBarIcon.png Resources/MenuBarIcon@2x.png "$APP/Contents/Resources/"
 
 echo "→ App icon"
