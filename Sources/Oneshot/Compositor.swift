@@ -90,7 +90,8 @@ final class RenderSnapshot: @unchecked Sendable {
         let frame = content.applying(cameraTransform)
         let radius = baseRadius * s
 
-        let screen = source.transformed(by: sourceToCanvas)
+        let screen = Self.resample(source, scale: fit * s,
+                                   offset: CGPoint(x: (content.minX - originX) * s, y: (content.minY - originY) * s))
         if let mask = Self.roundedRect(frame, radius: radius, color: CIColor(red: 1, green: 1, blue: 1, alpha: 1)) {
             output = screen.applyingFilter("CIBlendWithMask", parameters: [
                 kCIInputBackgroundImageKey: output,
@@ -106,6 +107,34 @@ final class RenderSnapshot: @unchecked Sendable {
         output = drawCursor(on: output, t: t, point: point, pixelsPerPoint: pixelsPerPoint,
                             contentPixels: CGSize(width: content.width * s, height: content.height * s))
         return output.cropped(to: canvasRect)
+    }
+
+    /// Places the recording on the canvas: the same mapping as `sourceToCanvas`, but resized with
+    /// Lanczos instead of bilinear filtering. When zooming in past the recording's own resolution
+    /// (common with 1× displays) it also sharpens a little, so text stays crisp instead of soft.
+    static func resample(_ source: CIImage, scale k: CGFloat, offset: CGPoint) -> CIImage {
+        let src = source.extent
+        let placed = CGAffineTransform(translationX: offset.x, y: offset.y)
+        guard abs(k - 1) > 0.001 else {
+            return source.transformed(by: CGAffineTransform(translationX: -src.minX + offset.x, y: -src.minY + offset.y))
+        }
+        // Clamp first so the edges are resampled from real pixels rather than fading to transparent.
+        var image = source
+            .transformed(by: CGAffineTransform(translationX: -src.minX, y: -src.minY))
+            .clampedToExtent()
+            .applyingFilter("CILanczosScaleTransform", parameters: [
+                kCIInputScaleKey: k,
+                kCIInputAspectRatioKey: 1,
+            ])
+        if k > 1.1 {
+            image = image.applyingFilter("CISharpenLuminance", parameters: [
+                kCIInputSharpnessKey: min(0.5, (k - 1) * 0.45),
+                kCIInputRadiusKey: 1.2,
+            ])
+        }
+        return image
+            .cropped(to: CGRect(x: 0, y: 0, width: src.width * k, height: src.height * k))
+            .transformed(by: placed)
     }
 
     private func drawClicks(on image: CIImage, t: Double, point: (Double, Double) -> CGPoint,
