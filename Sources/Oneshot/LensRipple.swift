@@ -70,17 +70,20 @@ enum LensRipple {
             "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
             "inputGVector": CIVector(x: 0, y: 1, z: 0, w: 0),
             "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
         ])
         let b = blue.applyingFilter("CIColorMatrix", parameters: [
             "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
             "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
             "inputBVector": CIVector(x: 0, y: 0, z: 1, w: 0),
-            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
         ])
+        // Each image is opaque and holds one channel (others zero), so a per-channel maximum
+        // reassembles the full colour. (Zero-alpha channel images get dropped by premultiplication,
+        // which is what tinted the patch red.)
         let combined = r
-            .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: g])
-            .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: b])
+            .applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: g])
+            .applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: b])
             .cropped(to: area)
         return combined.composited(over: image)
     }
