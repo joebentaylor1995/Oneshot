@@ -88,7 +88,7 @@ final class ExportModel: ObservableObject {
         // H.264 plays everywhere; 4K uses HEVC (H.264 tops out around 4096×2304).
         let preset = resolution >= 2160 ? AVAssetExportPresetHEVCHighestQuality : AVAssetExportPresetHighestQuality
         guard let session = AVAssetExportSession(asset: composition, presetName: preset) else {
-            throw ReelError.exportFailed("Couldn't create an export session.")
+            throw OneshotError.exportFailed("Couldn't create an export session.")
         }
         session.outputURL = url
         session.outputFileType = .mp4
@@ -113,7 +113,7 @@ final class ExportModel: ObservableObject {
 
         if session.status == .cancelled { throw CancellationError() }
         guard session.status == .completed else {
-            throw ReelError.exportFailed(session.error?.localizedDescription ?? "Unknown error.")
+            throw OneshotError.exportFailed(session.error?.localizedDescription ?? "Unknown error.")
         }
     }
 
@@ -134,7 +134,7 @@ final class ExportModel: ObservableObject {
         let duration = editor.outputDuration
         let frameCount = max(1, Int(duration * Double(gifFPS)))
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, frameCount, nil) else {
-            throw ReelError.exportFailed("Couldn't create the GIF file.")
+            throw OneshotError.exportFailed("Couldn't create the GIF file.")
         }
         let fileProperties = [kCGImagePropertyGIFDictionary as String: [kCGImagePropertyGIFLoopCount as String: 0]]
         CGImageDestinationSetProperties(destination, fileProperties as CFDictionary)
@@ -152,7 +152,7 @@ final class ExportModel: ObservableObject {
             state = .exporting(Double(index + 1) / Double(frameCount))
         }
         guard CGImageDestinationFinalize(destination) else {
-            throw ReelError.exportFailed("Couldn't finish writing the GIF.")
+            throw OneshotError.exportFailed("Couldn't finish writing the GIF.")
         }
     }
 }

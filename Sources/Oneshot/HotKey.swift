@@ -13,7 +13,7 @@ final class HotKey {
         self.id = id
         HotKey.handlers[id] = action
         HotKey.installHandlerIfNeeded()
-        let hotKeyID = EventHotKeyID(signature: OSType(0x5245_454C), id: id) // 'REEL'
+        let hotKeyID = EventHotKeyID(signature: OSType(0x4F4E_5348), id: id) // 'ONSH'
         RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &reference)
     }
 

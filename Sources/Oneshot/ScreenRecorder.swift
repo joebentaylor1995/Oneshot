@@ -20,7 +20,7 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
     private(set) var hasSystemAudio = false
     private(set) var hasMicrophone = false
 
-    private let queue = DispatchQueue(label: "reel.capture", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "oneshot.capture", qos: .userInteractive)
     private var stream: SCStream?
     private var writer: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
@@ -87,7 +87,7 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
         ]
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
-        guard writer.canAdd(videoInput) else { throw ReelError.writerFailed("Unsupported video settings.") }
+        guard writer.canAdd(videoInput) else { throw OneshotError.writerFailed("Unsupported video settings.") }
         writer.add(videoInput)
         self.videoInput = videoInput
 
@@ -112,7 +112,7 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
         }
 
         guard writer.startWriting() else {
-            throw ReelError.writerFailed(writer.error?.localizedDescription ?? "Unknown error.")
+            throw OneshotError.writerFailed(writer.error?.localizedDescription ?? "Unknown error.")
         }
         self.writer = writer
 
@@ -138,7 +138,7 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
                 finished = true
                 guard let writer, let firstFrameTime else {
                     writer?.cancelWriting()
-                    continuation.resume(throwing: ReelError.noFrames)
+                    continuation.resume(throwing: OneshotError.noFrames)
                     return
                 }
                 let endTime = hostTimeSeconds()
@@ -152,7 +152,7 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
                     if writer.status == .completed {
                         continuation.resume(returning: RecordingResult(firstFrameTime: firstFrameTime, endTime: endTime))
                     } else {
-                        continuation.resume(throwing: ReelError.writerFailed(writer.error?.localizedDescription ?? "Unknown error."))
+                        continuation.resume(throwing: OneshotError.writerFailed(writer.error?.localizedDescription ?? "Unknown error."))
                     }
                 }
             }

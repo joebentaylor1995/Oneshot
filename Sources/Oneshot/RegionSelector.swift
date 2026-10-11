@@ -376,7 +376,7 @@ final class SelectionView: NSView {
 // MARK: - Recording border
 
 /// Dashed outline drawn just outside the recorded area while recording.
-/// It sits outside the capture rect and Reel is excluded from capture, so it never appears in the video.
+/// It sits outside the capture rect and Oneshot is excluded from capture, so it never appears in the video.
 final class RecordingBorderWindow: NSWindow {
     init(around globalRect: CGRect) {
         let frame = globalRect.insetBy(dx: -4, dy: -4)

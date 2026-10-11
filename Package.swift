@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Reel",
+    name: "Oneshot",
     platforms: [.macOS("15.0")],
     targets: [
         .executableTarget(
-            name: "Reel",
-            path: "Sources/Reel"
+            name: "Oneshot",
+            path: "Sources/Oneshot"
         )
     ]
 )

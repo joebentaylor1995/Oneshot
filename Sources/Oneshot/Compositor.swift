@@ -305,7 +305,7 @@ enum Compositor {
                 if let composition {
                     continuation.resume(returning: composition)
                 } else {
-                    continuation.resume(throwing: error ?? ReelError.exportFailed("Couldn't create the video composition."))
+                    continuation.resume(throwing: error ?? OneshotError.exportFailed("Couldn't create the video composition."))
                 }
             })
         }

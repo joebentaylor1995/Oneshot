@@ -4,7 +4,7 @@ import CoreMedia
 import ImageIO
 import UniformTypeIdentifiers
 
-enum ReelError: LocalizedError {
+enum OneshotError: LocalizedError {
     case displayNotFound
     case noFrames
     case writerFailed(String)
@@ -25,11 +25,17 @@ enum ReelError: LocalizedError {
 }
 
 enum Paths {
-    /// ~/Movies/Reel. Not a privacy-protected folder, so no extra permission prompts.
+    /// ~/Movies/Oneshot. Not a privacy-protected folder, so no extra permission prompts.
     static var root: URL {
         let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
-        let folder = movies.appendingPathComponent("Reel", isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let folder = movies.appendingPathComponent("Oneshot", isDirectory: true)
+        let fileManager = FileManager.default
+        // The app used to be called Reel: carry its recordings over the first time.
+        let legacy = movies.appendingPathComponent("Reel", isDirectory: true)
+        if !fileManager.fileExists(atPath: folder.path), fileManager.fileExists(atPath: legacy.path) {
+            try? fileManager.moveItem(at: legacy, to: folder)
+        }
+        try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
     }
 

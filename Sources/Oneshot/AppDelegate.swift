@@ -126,9 +126,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         recentItem.submenu = recentMenu
         menu.addItem(recentItem)
-        menu.addItem(item("Open Reel Folder", #selector(openFolder)))
+        menu.addItem(item("Open Oneshot Folder", #selector(openFolder)))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Reel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Oneshot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -157,12 +157,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tickTimer = nil
         recordingStartedAt = nil
         guard let button = statusItem.button else { return }
-        let image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Reel")
+        let image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Oneshot")
         image?.isTemplate = true
         button.image = image
         button.title = ""
         button.imagePosition = .imageOnly
-        button.toolTip = "Reel (⌘⇧2 to record)"
+        button.toolTip = "Oneshot (⌘⇧2 to record)"
         button.action = nil
         statusItem.menu = menu
     }
@@ -214,7 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard session == nil, !isStarting else { return }
         if !CGPreflightScreenCaptureAccess() {
             // Ask macOS once per launch. After that, a newly granted permission only takes
-            // effect once Reel restarts, so offer to do that instead of asking again.
+            // effect once Oneshot restarts, so offer to do that instead of asking again.
             if !hasRequestedScreenAccess {
                 hasRequestedScreenAccess = true
                 if CGRequestScreenCaptureAccess() { return beginSelection(mode) }
@@ -254,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
             guard let display = content.displays.first(where: { $0.displayID == screen.displayID }) else {
-                throw ReelError.displayNotFound
+                throw OneshotError.displayNotFound
             }
             let ownApp = content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
 
@@ -357,8 +357,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func showPermissionAlert() {
         NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = "Reel needs Screen Recording permission"
-        alert.informativeText = "Turn on Reel in System Settings › Privacy & Security › Screen & System Audio Recording, then choose Quit & Reopen here."
+        alert.messageText = "Oneshot needs Screen Recording permission"
+        alert.informativeText = "Turn on Oneshot in System Settings › Privacy & Security › Screen & System Audio Recording, then choose Quit & Reopen here."
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "Quit & Reopen")
         alert.addButton(withTitle: "Cancel")
@@ -374,7 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Starts a fresh copy of Reel a moment after this one quits.
+    /// Starts a fresh copy of Oneshot a moment after this one quits.
     private func relaunch() {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")

@@ -64,7 +64,7 @@ final class EditorModel: ObservableObject {
     private var snapshotTask: Task<Void, Never>?
 
     init(project: ProjectFolder) throws {
-        guard let info = project.loadInfo() else { throw ReelError.projectUnreadable }
+        guard let info = project.loadInfo() else { throw OneshotError.projectUnreadable }
         self.project = project
         self.info = info
         cursorTrack = project.loadCursor() ?? CursorTrack()

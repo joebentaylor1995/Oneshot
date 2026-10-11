@@ -1,4 +1,4 @@
-# Reel
+# Oneshot
 
 A native Mac screen recorder in the spirit of Screen Studio. Record, and the result already looks polished: your screen sits on a background with padding, rounded corners and a shadow, the cursor is re-rendered smooth and sharp, and the camera zooms in automatically where you click.
 
@@ -48,19 +48,19 @@ This is phase 1 (the core look). Camera, captions, transcript editing and share 
 ## Build and install
 
 ```bash
-cd Reel
+cd oneshot-app
 chmod +x build.sh
 ./build.sh install
 ```
 
-That compiles, assembles `Reel.app`, signs it ad-hoc, copies it to `/Applications` and launches it. Look for the record icon in the menu bar.
+That compiles, assembles `Oneshot.app`, signs it ad-hoc, copies it to `/Applications` and launches it. Look for the record icon in the menu bar.
 
-**Permissions.** First recording asks for Screen Recording (and Microphone if you picked one). Allow Reel in System Settings › Privacy & Security, then quit and reopen Reel.
+**Permissions.** First recording asks for Screen Recording (and Microphone if you picked one). Allow Oneshot in System Settings › Privacy & Security, then quit and reopen Oneshot.
 
-**Rebuilding.** With ad-hoc signing macOS treats each build as a new app, so Screen Recording needs re-allowing. Toggle Reel off and on in that settings pane, or run:
+**Rebuilding.** With ad-hoc signing macOS treats each build as a new app, so Screen Recording needs re-allowing. Toggle Oneshot off and on in that settings pane, or run:
 
 ```bash
-tccutil reset ScreenCapture com.joebentaylor.reel
+tccutil reset ScreenCapture com.joebentaylor.oneshot
 ```
 
 Signing with an Apple Development certificate avoids this (see the top of `build.sh`).
@@ -68,7 +68,7 @@ Signing with an Apple Development certificate avoids this (see the top of `build
 ## Where things go
 
 ```
-~/Movies/Reel/
+~/Movies/Oneshot/
   Recording 2026-10-10 at 00.12.33.mp4      exports
   Projects/
     Recording 2026-10-10 at 00.12.33/

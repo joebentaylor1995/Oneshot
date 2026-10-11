@@ -91,10 +91,10 @@ enum CompositionBuilder {
     /// Builds the trimmed, cut and speed-adjusted composition (video + audio tracks) from the raw recording.
     static func build(source: AVAsset, mapping: TimeMapping) async throws -> AVMutableComposition {
         let composition = AVMutableComposition()
-        guard let sourceVideo = try await source.loadTracks(withMediaType: .video).first else { throw ReelError.noVideoTrack }
+        guard let sourceVideo = try await source.loadTracks(withMediaType: .video).first else { throw OneshotError.noVideoTrack }
         let videoRange = try await sourceVideo.load(.timeRange)
         guard let videoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
-            throw ReelError.noVideoTrack
+            throw OneshotError.noVideoTrack
         }
 
         var audio: [(source: AVAssetTrack, range: CMTimeRange, target: AVMutableCompositionTrack)] = []

@@ -35,7 +35,7 @@ final class CursorSampler: @unchecked Sendable {
     /// Recorded area in global Quartz coordinates (points, top-left origin).
     private let region: CGRect
     private let store: CursorTrackStore
-    private let queue = DispatchQueue(label: "reel.cursor", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "oneshot.cursor", qos: .userInteractive)
     private var timer: DispatchSourceTimer?
     private var wasDown = false
 

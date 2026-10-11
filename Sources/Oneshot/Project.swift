@@ -182,7 +182,7 @@ struct ProjectEdits: Codable, Equatable {
 
 // MARK: - Project folder on disk
 
-/// ~/Movies/Reel/Projects/Recording <date>/
+/// ~/Movies/Oneshot/Projects/Recording <date>/
 ///   screen.mov      video + system audio + microphone tracks
 ///   recording.json  RecordingInfo
 ///   cursor.json     CursorTrack

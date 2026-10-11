@@ -21,7 +21,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.setContentSize(NSSize(width: 1320, height: 840))
         window.center()
-        window.setFrameAutosaveName("ReelEditor")
+        window.setFrameAutosaveName("OneshotEditor")
 
         super.init(window: window)
         window.delegate = self
