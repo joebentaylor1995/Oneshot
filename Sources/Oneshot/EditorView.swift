@@ -11,25 +11,29 @@ struct EditorView: View {
             topBar
             Rectangle().fill(Theme.hairline).frame(height: 1)
 
+            // Canvas and timeline on the left; the inspector runs the full height on the right,
+            // with its icon rail floating at the canvas's top-right corner.
             HStack(alignment: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     canvasHeader
                     preview
                     transportRow
+                    EditorTimeline(model: model)
+                        .frame(height: 120)
+                        .padding(.bottom, 18)
                 }
-                InspectorRail(model: model)
-                    .padding(.top, 14)
+                .overlay(alignment: .topTrailing) {
+                    InspectorRail(model: model)
+                        .padding(.top, 18)
+                }
                 InspectorView(model: model)
                     .frame(width: 300)
-                    .padding(.top, 12)
-                    .padding(.trailing, 12)
-                    .padding(.bottom, 8)
+                    .padding(.top, 18)
+                    .padding(.trailing, 18)
+                    .padding(.bottom, 18)
             }
-
-            EditorTimeline(model: model)
-                .frame(height: 150)
         }
-        .background(Theme.window)
+        .background(WindowGlass())
         .environment(\.colorScheme, .dark)
         .frame(minWidth: 1100, minHeight: 720)
         .task { await model.load() }
@@ -128,7 +132,9 @@ struct EditorView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
             }
         }
-        .padding(.horizontal, 28)
+        // Wider on the right to keep clear of the floating inspector rail.
+        .padding(.leading, 28)
+        .padding(.trailing, 56)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

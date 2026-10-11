@@ -32,7 +32,7 @@ struct EditorTimeline: View {
             .padding(.horizontal, inset)
             .padding(.top, 4)
             .overlay(alignment: .topLeading) {
-                PlayheadLine(clock: model.clock, x0: inset, pps: pps, height: geo.size.height - 12)
+                PlayheadLine(clock: model.clock, x0: inset, pps: pps, height: geo.size.height + 16)
             }
         }
     }

@@ -182,7 +182,7 @@ struct AspectBar: View {
             }
         }
         .padding(6)
-        .background(Capsule().fill(Color(red: 0.09, green: 0.09, blue: 0.11).opacity(0.94)))
+        .background(Capsule().fill(Theme.overlayBar))
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
         .environment(\.colorScheme, .dark)

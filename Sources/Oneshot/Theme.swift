@@ -1,15 +1,18 @@
 import AppKit
 import SwiftUI
 
-/// Dark editor look modelled on Screen Studio: near-black window, slightly lifted cards,
-/// a violet accent, pill-shaped option chips, an amber clip track and an indigo zoom track.
+/// Dark editor look (Figma: Oneshot › Components / Variables): a black glass window, neutral
+/// lifted cards, a violet accent, pill-shaped option chips, a red clip track and a graphite zoom lane.
+/// Names match the Figma Color variables (surface/window → Theme.window, …).
 enum Theme {
     static let accent = Color(red: 0.42, green: 0.35, blue: 0.98)          // #6B59FA
     static let accentSoft = Color(red: 0.62, green: 0.57, blue: 1.0)       // slider knobs, icons
-    static let window = Color(red: 0.071, green: 0.071, blue: 0.086)       // #121216
-    static let nsWindow = NSColor(red: 0.071, green: 0.071, blue: 0.086, alpha: 1)
-    static let card = Color(red: 0.11, green: 0.105, blue: 0.13)           // #1C1B21
-    static let cardTop = Color(red: 0.13, green: 0.12, blue: 0.15)
+    static let window = Color(red: 0, green: 0.008, blue: 0)               // #000200
+    /// The editor window is glass: blurred desktop behind, then `window` at this opacity.
+    static let windowTintOpacity = 0.5
+    static let overlayBar = Color(red: 0, green: 0.008, blue: 0).opacity(0.94) // surface/overlay-bar
+    static let card = Color(red: 0.067, green: 0.090, blue: 0.090)         // #111717
+    static let cardTop = Color(red: 0.082, green: 0.102, blue: 0.102)      // #151A1A
     static let hairline = Color.white.opacity(0.07)
     static let control = Color.white.opacity(0.05)
     static let controlHover = Color.white.opacity(0.08)
@@ -18,9 +21,9 @@ enum Theme {
     static let textSecondary = Color.white.opacity(0.52)
     static let textTertiary = Color.white.opacity(0.32)
 
-    static let clipTop = Color(red: 0.70, green: 0.47, blue: 0.13)
-    static let clipBottom = Color(red: 0.80, green: 0.55, blue: 0.17)
-    static let zoomTrack = Color(red: 0.10, green: 0.095, blue: 0.19)
+    static let clipTop = Color(red: 0.698, green: 0.129, blue: 0.129)      // #B22121
+    static let clipBottom = Color(red: 0.80, green: 0.169, blue: 0.169)    // #CC2B2B
+    static let zoomTrack = Color(red: 0.149, green: 0.153, blue: 0.161)    // #262729
     static let zoomTop = Color(red: 0.47, green: 0.40, blue: 0.98)
     static let zoomBottom = Color(red: 0.37, green: 0.30, blue: 0.88)
 
@@ -239,6 +242,30 @@ struct AccentButton: View {
         .disabled(!enabled)
         .onHover { hovering = $0 }
     }
+}
+
+/// Translucent window background: the desktop blurred behind the window, tinted with
+/// `Theme.window` (Figma: Glass effect + 50% surface/window fill).
+struct WindowGlass: View {
+    var body: some View {
+        ZStack {
+            BehindWindowBlur()
+            Theme.window.opacity(Theme.windowTintOpacity)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct BehindWindowBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
 /// Lets an area of SwiftUI content drag the window (used for the custom title bar).
