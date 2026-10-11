@@ -79,7 +79,11 @@ final class RenderSnapshot: @unchecked Sendable {
 
         // Background and shadow never change during playback, so they come from a cached bitmap
         // that the camera just scales and moves (no per-frame blur).
-        let baseRadius = min(CGFloat(style.cornerRadius) * short, min(content.width, content.height) / 2)
+        // With no padding the recording fills the canvas edge to edge, so its corners stay square
+        // rather than showing slivers of background.
+        let baseRadius = style.padding > 0
+            ? min(CGFloat(style.cornerRadius) * short, min(content.width, content.height) / 2)
+            : 0
         var output = baseLayer(canvas: canvas, content: content, radius: baseRadius, short: short)
             .transformed(by: cameraTransform)
 

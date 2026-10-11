@@ -124,11 +124,11 @@ enum ClickEffect: String, Codable, CaseIterable, Identifiable {
 struct StyleSettings: Codable, Equatable {
     var background: BackgroundStyle = .gradient(0)
     /// Fractions of the canvas' shorter side, so they look the same at every export size.
-    var padding: Double = 0.09
+    var padding: Double = 0
     var cornerRadius: Double = 0.014
     var shadow: Double = 0.55
     var shadowSize: Double = 0.035
-    var aspect: AspectRatio = .wide
+    var aspect: AspectRatio = .auto
 
     var showCursor = true
     var cursorScale: Double = 1.6
