@@ -98,15 +98,16 @@ final class RenderSnapshot: @unchecked Sendable {
 
         // Canvas pixels per screen point, used to size the cursor and click effects.
         let pixelsPerPoint = fit * s * CGFloat(info.scale)
-        output = drawClicks(on: output, t: t, point: point, pixelsPerPoint: pixelsPerPoint)
+        output = drawClicks(on: output, t: t, point: point, pixelsPerPoint: pixelsPerPoint, short: short)
         output = drawCursor(on: output, t: t, point: point, pixelsPerPoint: pixelsPerPoint,
                             contentPixels: CGSize(width: content.width * s, height: content.height * s))
         return output.cropped(to: canvasRect)
     }
 
-    private func drawClicks(on image: CIImage, t: Double, point: (Double, Double) -> CGPoint, pixelsPerPoint: CGFloat) -> CIImage {
+    private func drawClicks(on image: CIImage, t: Double, point: (Double, Double) -> CGPoint,
+                            pixelsPerPoint: CGFloat, short: CGFloat) -> CIImage {
         guard style.clickEffect != .none, !clicks.isEmpty else { return image }
-        let life = 0.55
+        let life = style.clickEffect == .lens ? LensRipple.duration : 0.55
         var output = image
         // Binary search for the first click that could still be visible.
         var low = 0
@@ -124,6 +125,9 @@ final class RenderSnapshot: @unchecked Sendable {
             let center = point(click.x, click.y)
             let base = 14 * pixelsPerPoint * CGFloat(style.cursorScale)
             switch style.clickEffect {
+            case .lens:
+                // Drawn under the cursor, so the pointer itself stays crisp.
+                output = LensRipple.apply(to: output, center: center, progress: progress, scale: short)
             case .ripple:
                 let r = base * CGFloat(0.4 + 1.6 * Ease.outCubic(progress))
                 let ring = max(1.5, base * 0.14)

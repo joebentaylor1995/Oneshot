@@ -114,7 +114,9 @@ enum BackgroundStyle: Codable, Equatable {
 }
 
 enum ClickEffect: String, Codable, CaseIterable, Identifiable {
-    case none, ripple, circle
+    /// Refractive shockwave: a glass-like ring spreads from the click and bends what it passes over.
+    case lens
+    case ripple, circle, none
     var id: String { rawValue }
     var label: String { rawValue.capitalized }
 }
@@ -132,7 +134,7 @@ struct StyleSettings: Codable, Equatable {
     var cursorScale: Double = 1.6
     var cursorSmoothing: Double = 0.6
     var motionBlur: Double = 0.5
-    var clickEffect: ClickEffect = .ripple
+    var clickEffect: ClickEffect = .lens
     var hideIdleCursor = true
 
     var cameraSmoothing: Double = 0.5
