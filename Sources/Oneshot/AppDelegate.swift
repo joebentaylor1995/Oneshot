@@ -183,6 +183,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let version = NSMenuItem(title: "Version \(updater.displayVersion)", action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
+        let credit = NSMenuItem(title: "JoeBenTaylor © \(Calendar.current.component(.year, from: Date()))", action: nil, keyEquivalent: "")
+        credit.isEnabled = false
+        menu.addItem(credit)
     }
 
     @objc private func checkForUpdates() {

@@ -20,6 +20,8 @@
     <string>2.0</string>
     <key>CFBundleVersion</key>
     <string>2</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>JoeBenTaylor © 2026</string>
     <key>LSMinimumSystemVersion</key>
     <string>15.0</string>
     <key>LSUIElement</key>
