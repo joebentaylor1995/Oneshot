@@ -161,6 +161,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func addUpdateItems(to menu: NSMenu) {
+        guard updater.isEnabled else {
+            let version = NSMenuItem(title: "Oneshot \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(updater.shortVersion))",
+                                     action: nil, keyEquivalent: "")
+            version.isEnabled = false
+            menu.addItem(version)
+            return
+        }
         switch updater.state {
         case .available(let count, let summary):
             let install = item("Install Update (\(count) new change\(count == 1 ? "" : "s"))…", #selector(installUpdate))

@@ -24,6 +24,8 @@ final class Updater {
     private(set) var state: State = .idle { didSet { onChange?() } }
     var onChange: (() -> Void)?
 
+    /// Copies made for other people (make-dmg.sh) don't update from the private repo.
+    let isEnabled = !(Bundle.main.object(forInfoDictionaryKey: "OneshotDistribution") as? Bool ?? false)
     let builtCommit = Bundle.main.object(forInfoDictionaryKey: "OneshotCommit") as? String ?? "unknown"
     let builtSubject = Bundle.main.object(forInfoDictionaryKey: "OneshotCommitSubject") as? String ?? ""
     private var installProcess: Process?
