@@ -68,6 +68,9 @@ if [[ ! -f "$APP/Contents/Resources/AppIcon.icns" ]]; then
 fi
 rm -rf "$ICON_TMP"
 
+# codesign rejects extended attributes (iCloud Desktop sync, download provenance, Finder info).
+xattr -cr "$APP" 2>/dev/null || true
+
 echo "→ Signing ($SIGN_IDENTITY)"
 if ! codesign --force --sign "$SIGN_IDENTITY" "$APP"; then
   echo "  Couldn't sign with \"$SIGN_IDENTITY\", falling back to ad-hoc."
