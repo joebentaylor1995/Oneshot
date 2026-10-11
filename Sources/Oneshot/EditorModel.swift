@@ -48,6 +48,13 @@ final class EditorModel: ObservableObject {
     @Published private(set) var thumbnails: [NSImage] = []
     @Published private(set) var isLoaded = false
     @Published private(set) var loadError: String?
+    @Published private(set) var canUndo = false
+    @Published private(set) var canRedo = false
+
+    private var undoStack: [ProjectEdits] = []
+    private var redoStack: [ProjectEdits] = []
+    private var lastUndoSnapshot = Date.distantPast
+    private var isRestoringHistory = false
 
     private var cursorImages: [CIImage] = []
     private var cursorShapes: [CursorShape] = []
@@ -188,6 +195,7 @@ final class EditorModel: ObservableObject {
     private func editsDidChange(from old: ProjectEdits) {
         scheduleSave()
         guard isLoaded else { return }
+        recordHistory(previous: old)
 
         let timingChanged = old.cuts != edits.cuts || old.speeds != edits.speeds
             || old.trimStart != edits.trimStart || old.trimEnd != edits.trimEnd
@@ -384,6 +392,63 @@ final class EditorModel: ObservableObject {
     func scrub(toSource time: Double) {
         pause()
         seek(toSource: time)
+    }
+
+    func jumpToStart() {
+        scrub(toSource: mapping.pieces.first?.sourceStart ?? 0)
+    }
+
+    func jumpToEnd() {
+        scrub(toSource: mapping.pieces.last?.sourceEnd ?? sourceDuration)
+    }
+
+    // MARK: Undo / redo
+
+    /// Bursts of changes (a slider drag, a segment drag) collapse into one undo step.
+    private func recordHistory(previous: ProjectEdits) {
+        guard !isRestoringHistory else { return }
+        let now = Date()
+        if now.timeIntervalSince(lastUndoSnapshot) > 0.6 {
+            undoStack.append(previous)
+            if undoStack.count > 200 { undoStack.removeFirst() }
+        }
+        lastUndoSnapshot = now
+        redoStack.removeAll()
+        updateHistoryFlags()
+    }
+
+    func undo() {
+        guard let previous = undoStack.popLast() else { return }
+        redoStack.append(edits)
+        restore(previous)
+    }
+
+    func redo() {
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(edits)
+        restore(next)
+    }
+
+    private func restore(_ snapshot: ProjectEdits) {
+        isRestoringHistory = true
+        edits = snapshot
+        isRestoringHistory = false
+        lastUndoSnapshot = .distantPast
+        if let selection, !selectionExists(selection) { self.selection = nil }
+        updateHistoryFlags()
+    }
+
+    private func selectionExists(_ selection: TimelineSelection) -> Bool {
+        switch selection {
+        case .zoom(let id): return edits.zooms.contains { $0.id == id }
+        case .cut(let id): return edits.cuts.contains { $0.id == id }
+        case .speed(let id): return edits.speeds.contains { $0.id == id }
+        }
+    }
+
+    private func updateHistoryFlags() {
+        canUndo = !undoStack.isEmpty
+        canRedo = !redoStack.isEmpty
     }
 
     // MARK: Editing

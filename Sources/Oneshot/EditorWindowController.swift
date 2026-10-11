@@ -16,7 +16,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
 
         let window = NSWindow(contentViewController: hosting)
         window.title = project.displayName
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        // Dark, chrome-less window with the traffic lights sitting in our own top bar.
+        // An empty unified toolbar makes the title bar tall enough to centre them.
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.toolbar = NSToolbar(identifier: "OneshotEditor")
+        window.toolbarStyle = .unified
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = Theme.nsWindow
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.setContentSize(NSSize(width: 1320, height: 840))
@@ -45,6 +53,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         let modifiers = event.modifierFlags
             .intersection(.deviceIndependentFlagsMask)
             .subtracting([.capsLock, .numericPad, .function])
+
+        // ⌘Z / ⇧⌘Z (Oneshot has no main menu, so handle them here).
+        if event.charactersIgnoringModifiers?.lowercased() == "z" {
+            if modifiers == [.command] { model.undo(); return true }
+            if modifiers == [.command, .shift] { model.redo(); return true }
+        }
         guard modifiers.isEmpty else { return false }
 
         switch event.keyCode {

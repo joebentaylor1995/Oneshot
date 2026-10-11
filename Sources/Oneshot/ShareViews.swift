@@ -22,36 +22,33 @@ struct ExportedFileTile: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(url.lastPathComponent)
-                        .font(.callout.weight(.medium))
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Theme.text)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(info)
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(Theme.textSecondary)
                     Text("Drag to share")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Color.accentColor)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.accentSoft)
                 }
                 Spacer(minLength: 0)
             }
             .padding(10)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.control))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.hairline, lineWidth: 1))
             .overlay(FileDragSource(url: url, image: thumbnail))
             .help("Drag into Slack, Finder, Mail, Figma…")
 
-            HStack {
-                Button {
+            HStack(spacing: 6) {
+                QuietButton(title: "Copy") {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.writeObjects([url as NSURL])
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
                 }
-                Button {
+                QuietButton(title: "Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
-                } label: {
-                    Label("Show in Finder", systemImage: "folder")
                 }
             }
         }

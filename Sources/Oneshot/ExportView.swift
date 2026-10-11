@@ -7,47 +7,35 @@ struct ExportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Export").font(.title2.weight(.semibold))
-
-            Picker("Format", selection: $exporter.format) {
-                ForEach(ExportModel.Format.allCases) { format in
-                    Text(format.rawValue).tag(format)
+            HStack {
+                Text("Export")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.text)
+                Spacer()
+                IconButton(systemName: "xmark", help: "Close", size: 11, enabled: !exporter.isExporting) {
+                    isPresented = false
                 }
             }
-            .pickerStyle(.segmented)
+
+            InspectorSection("Format") {
+                ChipPicker(options: ExportModel.Format.allCases.map { ($0, $0.rawValue) }, selection: $exporter.format)
+            }
             .disabled(exporter.isExporting)
 
             Group {
                 if exporter.format == .mp4 {
-                    row("Resolution") {
-                        Picker("Resolution", selection: $exporter.resolution) {
-                            Text("720p").tag(720)
-                            Text("1080p").tag(1080)
-                            Text("4K").tag(2160)
-                        }
+                    InspectorSection("Resolution") {
+                        ChipPicker(options: [(720, "720p"), (1080, "1080p"), (2160, "4K")], selection: $exporter.resolution)
                     }
-                    row("Frame rate") {
-                        Picker("Frame rate", selection: $exporter.fps) {
-                            Text("24").tag(24)
-                            Text("30").tag(30)
-                            Text("60").tag(60)
-                            Text("120").tag(120)
-                        }
+                    InspectorSection("Frame rate") {
+                        ChipPicker(options: [24, 30, 60, 120].map { ($0, "\($0) fps") }, selection: $exporter.fps)
                     }
                 } else {
-                    row("Size") {
-                        Picker("Size", selection: $exporter.gifSize) {
-                            Text("480p").tag(480)
-                            Text("720p").tag(720)
-                            Text("1080p").tag(1080)
-                        }
+                    InspectorSection("Size") {
+                        ChipPicker(options: [(480, "480p"), (720, "720p"), (1080, "1080p")], selection: $exporter.gifSize)
                     }
-                    row("Frame rate") {
-                        Picker("Frame rate", selection: $exporter.gifFPS) {
-                            Text("15").tag(15)
-                            Text("20").tag(20)
-                            Text("30").tag(30)
-                        }
+                    InspectorSection("Frame rate") {
+                        ChipPicker(options: [15, 20, 30].map { ($0, "\($0) fps") }, selection: $exporter.gifFPS)
                     }
                 }
             }
@@ -55,21 +43,25 @@ struct ExportView: View {
 
             let size = editor.canvasSize(shortSide: CGFloat(exporter.shortSide))
             Text("\(Int(size.width)) × \(Int(size.height))  ·  \(editor.edits.style.aspect.label)  ·  \(formatTime(editor.outputDuration))\(exporter.format == .mp4 && exporter.resolution >= 2160 ? "  ·  HEVC" : "")")
-                .font(.callout)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                .foregroundStyle(Theme.textSecondary)
 
             switch exporter.state {
             case .idle:
                 EmptyView()
             case .exporting(let progress):
-                ProgressView(value: progress) {
-                    Text("Exporting… \(Int(progress * 100))%").font(.callout)
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: progress)
+                        .tint(Theme.accentSoft)
+                    Text("Exporting… \(Int(progress * 100))%")
+                        .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Theme.textSecondary)
                 }
             case .done(let url):
                 ExportedFileTile(url: url, thumbnail: editor.thumbnails.first, info: exporter.resultInfo)
             case .failed(let message):
                 Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -77,36 +69,26 @@ struct ExportView: View {
             HStack {
                 Spacer()
                 if exporter.isExporting {
-                    Button("Cancel") { exporter.cancel() }
+                    QuietButton(title: "Cancel") { exporter.cancel() }
                 } else {
-                    Button("Close") { isPresented = false }
+                    QuietButton(title: "Close") { isPresented = false }
                         .keyboardShortcut(.cancelAction)
                 }
-                Button {
+                AccentButton(title: isDone ? "Export again" : "Export", systemImage: "square.and.arrow.up",
+                             enabled: !exporter.isExporting) {
                     exporter.start(editor: editor)
-                } label: {
-                    Text(isDone ? "Export Again" : "Export")
                 }
-                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(exporter.isExporting)
             }
         }
-        .padding(24)
-        .frame(width: 500)
+        .padding(22)
+        .frame(width: 460)
+        .background(Theme.card)
+        .environment(\.colorScheme, .dark)
     }
 
     private var isDone: Bool {
         if case .done = exporter.state { return true }
         return false
-    }
-
-    private func row<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack {
-            Text(title).frame(width: 90, alignment: .leading)
-            content()
-                .pickerStyle(.segmented)
-                .labelsHidden()
-        }
     }
 }

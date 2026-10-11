@@ -7,21 +7,30 @@ struct EditorView: View {
     @State private var showingExport = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                toolbar
-                Divider()
-                preview
-                Divider()
-                transportBar
-                Divider()
-                EditorTimeline(model: model)
-                    .frame(height: 178)
+        VStack(spacing: 0) {
+            topBar
+            Rectangle().fill(Theme.hairline).frame(height: 1)
+
+            HStack(alignment: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    canvasHeader
+                    preview
+                    transportRow
+                }
+                InspectorRail(model: model)
+                    .padding(.top, 14)
+                InspectorView(model: model)
+                    .frame(width: 300)
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 8)
             }
-            Divider()
-            InspectorView(model: model)
-                .frame(width: 310)
+
+            EditorTimeline(model: model)
+                .frame(height: 150)
         }
+        .background(Theme.window)
+        .environment(\.colorScheme, .dark)
         .frame(minWidth: 1100, minHeight: 720)
         .task { await model.load() }
         .sheet(isPresented: $showingExport) {
@@ -29,94 +38,171 @@ struct EditorView: View {
         }
     }
 
-    // MARK: Toolbar
+    // MARK: Top bar
 
-    private var toolbar: some View {
-        HStack(spacing: 14) {
-            Picker("Aspect ratio", selection: $model.edits.style.aspect) {
-                ForEach(AspectRatio.allCases) { ratio in
-                    Text(ratio.label).tag(ratio)
+    private var topBar: some View {
+        ZStack {
+            WindowDragArea()
+
+            HStack(spacing: 4) {
+                Color.clear.frame(width: 72, height: 1) // traffic lights
+                IconButton(systemName: "folder", help: "Show recording in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([model.project.url])
                 }
+                Spacer()
+                IconButton(systemName: "arrow.uturn.backward", help: "Undo (⌘Z)", enabled: model.canUndo) { model.undo() }
+                IconButton(systemName: "arrow.uturn.forward", help: "Redo (⇧⌘Z)", enabled: model.canRedo) { model.redo() }
+                Rectangle().fill(Theme.hairline).frame(width: 1, height: 18).padding(.horizontal, 8)
+                AccentButton(title: "Export", systemImage: "square.and.arrow.up", enabled: model.isLoaded) {
+                    exporter.reset()
+                    showingExport = true
+                }
+                .keyboardShortcut("e", modifiers: .command)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 320)
+            .padding(.horizontal, 12)
+
+            HStack(spacing: 0) {
+                Text(model.project.displayName)
+                    .foregroundStyle(Theme.text)
+                Text(".oneshot")
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .font(.system(size: 12.5, weight: .medium))
+            .lineLimit(1)
+            .allowsHitTesting(false)
+        }
+        .frame(height: 52)
+    }
+
+    // MARK: Canvas
+
+    private var canvasHeader: some View {
+        HStack(spacing: 4) {
+            Menu {
+                ForEach(AspectRatio.allCases) { ratio in
+                    Button {
+                        model.edits.style.aspect = ratio
+                    } label: {
+                        if ratio == model.edits.style.aspect {
+                            Label(ratio.label, systemImage: "checkmark")
+                        } else {
+                            Text(ratio.label)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "aspectratio")
+                    Text(model.edits.style.aspect.label)
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.text)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
             .help("Output aspect ratio")
 
             Spacer()
-
-            Text(model.project.displayName)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-            Spacer()
-
-            Button {
-                exporter.reset()
-                showingExport = true
-            } label: {
-                Label("Export", systemImage: "square.and.arrow.up")
-            }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut("e", modifiers: .command)
-            .disabled(!model.isLoaded)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 22)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
     }
-
-    // MARK: Preview
 
     private var preview: some View {
         ZStack {
-            Color(nsColor: .underPageBackgroundColor)
             PlayerSurface(player: model.player)
                 .aspectRatio(model.outputAspect, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
-                .padding(24)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
             if !model.isLoaded {
-                ProgressView()
+                ProgressView().controlSize(.small)
             } else if let error = model.loadError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Theme.text)
                     .padding(10)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
             }
         }
+        .padding(.horizontal, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: Transport
 
-    private var transportBar: some View {
-        HStack(spacing: 10) {
-            Button {
-                model.togglePlayback()
-            } label: {
-                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill").frame(width: 18)
+    private var transportRow: some View {
+        ZStack {
+            HStack(spacing: 2) {
+                IconButton(systemName: "scissors", help: "Cut a section at the playhead (C)") { model.addCutAtPlayhead() }
+                IconButton(systemName: "hare", help: "Speed up a section at the playhead (S)") { model.addSpeedAtPlayhead() }
+                IconButton(systemName: "plus.magnifyingglass", help: "Add a zoom at the playhead (Z)") { model.addZoomAtPlayhead() }
+                IconButton(systemName: "wand.and.stars", help: "Rebuild automatic zooms from your clicks") { model.regenerateAutoZooms() }
+                Spacer()
+                IconButton(systemName: "trash", help: "Delete selected (⌫)", enabled: model.selection != nil) { model.deleteSelection() }
             }
-            .help("Play / Pause (Space)")
 
-            PlaybackTimeLabel(model: model, clock: model.clock)
-
-            Spacer()
-
-            Button { model.addZoomAtPlayhead() } label: { Label("Zoom", systemImage: "plus.magnifyingglass") }
-                .help("Add a zoom at the playhead (Z)")
-            Button { model.addCutAtPlayhead() } label: { Label("Cut", systemImage: "scissors") }
-                .help("Cut a section at the playhead (C)")
-            Button { model.addSpeedAtPlayhead() } label: { Label("Speed", systemImage: "hare") }
-                .help("Speed up a section at the playhead (S)")
-            Button { model.regenerateAutoZooms() } label: { Label("Auto Zoom", systemImage: "wand.and.stars") }
-                .help("Rebuild automatic zooms from your clicks")
-
-            Button(role: .destructive) { model.deleteSelection() } label: { Image(systemName: "trash") }
-                .disabled(model.selection == nil)
-                .help("Delete selected (⌫)")
+            HStack(spacing: 10) {
+                CurrentTimeLabel(model: model, clock: model.clock)
+                    .frame(width: 64, alignment: .trailing)
+                IconButton(systemName: "backward.end", help: "Go to start") { model.jumpToStart() }
+                Button {
+                    model.togglePlayback()
+                } label: {
+                    Image(systemName: model.isPlaying ? "pause.circle" : "play.circle")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundStyle(Theme.text)
+                        .frame(width: 32, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Play / Pause (Space)")
+                IconButton(systemName: "forward.end", help: "Go to end") { model.jumpToEnd() }
+                Text(formatTime(model.outputDuration))
+                    .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Theme.textTertiary)
+                    .frame(width: 64, alignment: .leading)
+            }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+}
+
+/// Right-hand icon rail that switches the inspector card.
+struct InspectorRail: View {
+    @ObservedObject var model: EditorModel
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ForEach(InspectorTab.allCases) { tab in
+                ZStack(alignment: .trailing) {
+                    IconButton(systemName: tab.icon, help: tab.rawValue, size: 13,
+                               isActive: model.inspectorTab == tab && model.selection == nil) {
+                        model.select(nil)
+                        model.inspectorTab = tab
+                    }
+                    if model.inspectorTab == tab && model.selection == nil {
+                        Circle().fill(Theme.accentSoft).frame(width: 3, height: 3).offset(x: -3)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+    }
+}
+
+extension InspectorTab {
+    var icon: String {
+        switch self {
+        case .background: return "square.dashed.inset.filled"
+        case .cursor: return "cursorarrow"
+        case .zoom: return "plus.magnifyingglass"
+        case .audio: return "speaker.wave.2"
+        }
     }
 }
 
@@ -136,13 +222,13 @@ struct PlayerSurface: NSViewRepresentable {
 }
 
 /// Only this small view redraws as the playhead moves.
-struct PlaybackTimeLabel: View {
+struct CurrentTimeLabel: View {
     @ObservedObject var model: EditorModel
     @ObservedObject var clock: PlaybackClock
 
     var body: some View {
-        Text("\(formatTime(model.mapping.compositionTime(forSource: clock.sourceTime))) / \(formatTime(model.outputDuration))")
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
+        Text(formatTime(model.mapping.compositionTime(forSource: clock.sourceTime)))
+            .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+            .foregroundStyle(Theme.textTertiary)
     }
 }

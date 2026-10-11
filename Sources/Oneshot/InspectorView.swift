@@ -2,27 +2,17 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Rounded inspector card to the right of the preview. Shows the selected timeline item's
+/// settings when something is selected, otherwise the tab picked in the icon rail.
 struct InspectorView: View {
     @ObservedObject var model: EditorModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            if model.selection != nil {
-                SelectionInspector(model: model)
-                    .padding(16)
-                Divider()
-            }
-            Picker("Section", selection: $model.inspectorTab) {
-                ForEach(InspectorTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(12)
-            Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                if model.selection != nil {
+                    SelectionInspector(model: model)
+                } else {
                     switch model.inspectorTab {
                     case .background: BackgroundInspector(model: model)
                     case .cursor: CursorInspector(model: model)
@@ -30,45 +20,18 @@ struct InspectorView: View {
                     case .audio: AudioInspector(model: model)
                     }
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .scrollIndicators(.never)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.hairline, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
-// MARK: - Shared pieces
-
-struct SectionTitle: View {
-    let text: String
-    init(_ text: String) { self.text = text }
-
-    var body: some View {
-        Text(text.uppercased())
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-    }
-}
-
-struct LabeledSlider: View {
-    let title: String
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    var format: (Double) -> String = { String(format: "%.0f%%", $0 * 100) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(format(value)).monospacedDigit().foregroundStyle(.secondary)
-            }
-            .font(.callout)
-            Slider(value: $value, in: range)
-        }
-    }
-}
+private let defaults = StyleSettings()
 
 // MARK: - Selection
 
@@ -76,18 +39,20 @@ struct SelectionInspector: View {
     @ObservedObject var model: EditorModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let zoom = model.selectedZoom {
-                header("Zoom", icon: "plus.magnifyingglass", range: (zoom.start, zoom.end))
-                LabeledSlider(title: "Zoom level",
-                              value: Binding(get: { zoom.scale },
-                                             set: { value in model.updateZoom(zoom.id) { $0.scale = value } }),
-                              range: 1.2...4,
-                              format: { String(format: "%.1f×", $0) })
-                Toggle("Follow cursor", isOn: Binding(get: { zoom.followsCursor },
-                                                      set: { value in model.updateZoom(zoom.id) { $0.followsCursor = value } }))
-                if !zoom.followsCursor {
-                    Text("Click to set the focus point").font(.caption).foregroundStyle(.secondary)
+        if let zoom = model.selectedZoom {
+            header("Zoom", range: (zoom.start, zoom.end))
+            InspectorSection("Zoom level", trailing: AnyView(valueLabel(String(format: "%.1f×", zoom.scale)))) {
+                ThemedSlider(value: Binding(get: { zoom.scale },
+                                            set: { value in model.updateZoom(zoom.id) { $0.scale = value } }),
+                             range: 1.2...4, defaultValue: 2)
+            }
+            InspectorDivider()
+            ThemedToggleRow(title: "Follow cursor",
+                            subtitle: "Keep the cursor in view while zoomed in.",
+                            isOn: Binding(get: { zoom.followsCursor },
+                                          set: { value in model.updateZoom(zoom.id) { $0.followsCursor = value } }))
+            if !zoom.followsCursor {
+                InspectorSection("Focus point") {
                     FocusPicker(image: model.thumbnail(near: zoom.start),
                                 aspect: model.info.sourceAspect,
                                 focus: CGPoint(x: zoom.focusX, y: zoom.focusY)) { point in
@@ -97,37 +62,47 @@ struct SelectionInspector: View {
                         }
                     }
                 }
-            } else if let cut = model.selectedCut {
-                header("Cut", icon: "scissors", range: (cut.start, cut.end))
-                Text("This section is removed from the video.").font(.caption).foregroundStyle(.secondary)
-            } else if let speed = model.selectedSpeed {
-                header("Speed", icon: "hare", range: (speed.start, speed.end))
-                Picker("Speed", selection: Binding(get: { speed.rate },
-                                                   set: { model.updateSpeed(speed.id, rate: $0) })) {
-                    ForEach([1.25, 1.5, 2, 3, 4, 8], id: \.self) { rate in
-                        Text(String(format: "%g×", rate)).tag(rate)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
-            Button(role: .destructive) {
-                model.deleteSelection()
-            } label: {
-                Label("Delete", systemImage: "trash")
+            deleteButton("Delete zoom")
+        } else if let cut = model.selectedCut {
+            header("Cut", range: (cut.start, cut.end))
+            Text("This part of the recording is removed from the video. Drag its edges on the timeline to adjust.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            deleteButton("Remove cut")
+        } else if let speed = model.selectedSpeed {
+            header("Speed", range: (speed.start, speed.end))
+            InspectorSection("Playback speed") {
+                ChipPicker(options: [1.25, 1.5, 2, 3, 4, 8].map { ($0, String(format: "%g×", $0)) },
+                           selection: Binding(get: { speed.rate }, set: { model.updateSpeed(speed.id, rate: $0) }))
             }
+            deleteButton("Remove speed-up")
         }
     }
 
-    private func header(_ title: String, icon: String, range: (Double, Double)) -> some View {
+    private func header(_ title: String, range: (Double, Double)) -> some View {
         HStack {
-            Label(title, systemImage: icon).font(.headline)
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.text)
+            Text("\(formatTime(range.0)) – \(formatTime(range.1))")
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(Theme.textTertiary)
             Spacer()
-            Text("\(formatTime(range.0)) to \(formatTime(range.1))")
-                .font(.caption)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            IconButton(systemName: "xmark", help: "Done", size: 11) { model.select(nil) }
         }
+    }
+
+    private func valueLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+            .foregroundStyle(Theme.textSecondary)
+    }
+
+    private func deleteButton(_ title: String) -> some View {
+        QuietButton(title: title) { model.deleteSelection() }
+            .padding(.top, 4)
     }
 }
 
@@ -147,7 +122,7 @@ struct FocusPicker: View {
                 }
                 Circle()
                     .strokeBorder(Color.white, lineWidth: 2)
-                    .background(Circle().fill(Color.purple.opacity(0.5)))
+                    .background(Circle().fill(Theme.accent.opacity(0.55)))
                     .frame(width: 18, height: 18)
                     .shadow(radius: 2)
                     .position(x: focus.x * geo.size.width, y: focus.y * geo.size.height)
@@ -162,68 +137,106 @@ struct FocusPicker: View {
             )
         }
         .aspectRatio(aspect, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
 // MARK: - Background
 
+private enum BackgroundKind: Hashable {
+    case wallpaper, gradient, color, image
+}
+
 struct BackgroundInspector: View {
     @ObservedObject var model: EditorModel
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 5)
+    @State private var kindOverride: BackgroundKind?
+
+    private var kind: BackgroundKind {
+        if let kindOverride { return kindOverride }
+        switch model.edits.style.background {
+        case .wallpaper: return .wallpaper
+        case .gradient: return .gradient
+        case .color: return .color
+        case .image: return .image
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Gradients")
-            LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(Backgrounds.gradients.indices, id: \.self) { index in
-                    let gradient = Backgrounds.gradients[index]
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(LinearGradient(colors: [gradient.a.color, gradient.b.color],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .aspectRatio(1, contentMode: .fit)
-                        .overlay(selectionRing(model.edits.style.background == .gradient(index)))
-                        .onTapGesture { model.edits.style.background = .gradient(index) }
-                        .help(gradient.name)
-                }
-            }
+        InspectorSection("Background") {
+            ChipPicker(options: [(BackgroundKind.wallpaper, "Wallpaper"), (.gradient, "Gradient"), (.color, "Color"), (.image, "Image")],
+                       selection: Binding(get: { kind }, set: { kindOverride = $0 }))
         }
 
-        if !Backgrounds.wallpapers.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionTitle("Wallpapers")
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                    ForEach(Backgrounds.wallpapers, id: \.self) { url in
-                        WallpaperThumb(url: url, isSelected: model.edits.style.background == .wallpaper(url.path)) {
-                            model.edits.style.background = .wallpaper(url.path)
+        switch kind {
+        case .wallpaper:
+            if Backgrounds.wallpapers.isEmpty {
+                Text("No macOS wallpapers found.").font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary)
+            } else {
+                InspectorSection("Wallpaper") {
+                    HStack {
+                        QuietButton(title: "Pick random wallpaper") {
+                            if let url = Backgrounds.wallpapers.randomElement() {
+                                model.edits.style.background = .wallpaper(url.path)
+                            }
+                        }
+                    }
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
+                        ForEach(Backgrounds.wallpapers, id: \.self) { url in
+                            WallpaperThumb(url: url, isSelected: model.edits.style.background == .wallpaper(url.path)) {
+                                model.edits.style.background = .wallpaper(url.path)
+                            }
                         }
                     }
                 }
             }
+        case .gradient:
+            InspectorSection("Gradient") {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
+                    ForEach(Backgrounds.gradients.indices, id: \.self) { index in
+                        let gradient = Backgrounds.gradients[index]
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(LinearGradient(colors: [gradient.a.color, gradient.b.color],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay(selectionRing(model.edits.style.background == .gradient(index)))
+                            .contentShape(Rectangle())
+                            .onTapGesture { model.edits.style.background = .gradient(index) }
+                            .help(gradient.name)
+                    }
+                }
+            }
+        case .color:
+            InspectorSection("Color") {
+                ColorPicker("Background colour", selection: colorBinding, supportsOpacity: false)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        case .image:
+            InspectorSection("Image") {
+                QuietButton(title: "Choose image…") { chooseImage() }
+                if case .image(let path) = model.edits.style.background {
+                    Text(URL(fileURLWithPath: path).lastPathComponent)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
+                }
+            }
         }
 
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Colour & image")
-            ColorPicker("Solid colour", selection: colorBinding, supportsOpacity: false)
-            Button {
-                chooseImage()
-            } label: {
-                Label("Choose Image…", systemImage: "photo")
-            }
-            if case .image(let path) = model.edits.style.background {
-                Text(URL(fileURLWithPath: path).lastPathComponent)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
+        InspectorDivider()
 
-        VStack(alignment: .leading, spacing: 12) {
-            SectionTitle("Frame")
-            LabeledSlider(title: "Padding", value: $model.edits.style.padding, range: 0...0.25)
-            LabeledSlider(title: "Corner radius", value: $model.edits.style.cornerRadius, range: 0...0.06)
-            LabeledSlider(title: "Shadow", value: $model.edits.style.shadow, range: 0...1)
-            LabeledSlider(title: "Shadow size", value: $model.edits.style.shadowSize, range: 0...0.1)
+        InspectorSection("Padding") {
+            ThemedSlider(value: $model.edits.style.padding, range: 0...0.25, defaultValue: defaults.padding)
+        }
+        InspectorSection("Roundness") {
+            ThemedSlider(value: $model.edits.style.cornerRadius, range: 0...0.06, defaultValue: defaults.cornerRadius)
+        }
+        InspectorDivider()
+        InspectorSection("Shadow") {
+            ThemedSlider(value: $model.edits.style.shadow, range: 0...1, defaultValue: defaults.shadow)
+        }
+        InspectorSection("Shadow size") {
+            ThemedSlider(value: $model.edits.style.shadowSize, range: 0...0.1, defaultValue: defaults.shadowSize)
         }
     }
 
@@ -248,8 +261,8 @@ struct BackgroundInspector: View {
 }
 
 func selectionRing(_ selected: Bool) -> some View {
-    RoundedRectangle(cornerRadius: 6)
-        .strokeBorder(Color.accentColor, lineWidth: selected ? 2.5 : 0)
+    RoundedRectangle(cornerRadius: 7)
+        .strokeBorder(Color.white.opacity(selected ? 0.95 : 0), lineWidth: 2)
 }
 
 struct WallpaperThumb: View {
@@ -263,12 +276,12 @@ struct WallpaperThumb: View {
             if let image {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
             } else {
-                Color.secondary.opacity(0.15)
+                Theme.control
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 48)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .aspectRatio(1, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
         .overlay(selectionRing(isSelected))
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
@@ -277,7 +290,7 @@ struct WallpaperThumb: View {
             guard image == nil else { return }
             let target = url
             let cgImage = await Task.detached(priority: .utility) {
-                Backgrounds.loadImage(at: target, maxPixel: 240)
+                Backgrounds.loadImage(at: target, maxPixel: 200)
             }.value
             if let cgImage { image = NSImage(cgImage: cgImage, size: .zero) }
         }
@@ -290,24 +303,30 @@ struct CursorInspector: View {
     @ObservedObject var model: EditorModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionTitle("Cursor")
-            Toggle("Show cursor", isOn: $model.edits.style.showCursor)
-            LabeledSlider(title: "Size", value: $model.edits.style.cursorScale, range: 0.8...3,
-                          format: { String(format: "%.1f×", $0) })
-            LabeledSlider(title: "Smoothing", value: $model.edits.style.cursorSmoothing, range: 0...1)
-            LabeledSlider(title: "Motion blur", value: $model.edits.style.motionBlur, range: 0...1)
-            Toggle("Hide when idle", isOn: $model.edits.style.hideIdleCursor)
+        InspectorSection("Cursor size") {
+            ThemedSlider(value: $model.edits.style.cursorScale, range: 0.8...3, defaultValue: defaults.cursorScale)
         }
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Clicks")
-            Picker("Click effect", selection: $model.edits.style.clickEffect) {
-                ForEach(ClickEffect.allCases) { effect in
-                    Text(effect.label).tag(effect)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+        InspectorSection("Smoothing") {
+            ThemedSlider(value: $model.edits.style.cursorSmoothing, range: 0...1, defaultValue: defaults.cursorSmoothing)
+        }
+        InspectorSection("Motion blur") {
+            ThemedSlider(value: $model.edits.style.motionBlur, range: 0...1, defaultValue: defaults.motionBlur)
+        }
+
+        InspectorDivider()
+
+        ThemedToggleRow(title: "Hide cursor if not moving",
+                        subtitle: "Fades the cursor out after a moment of stillness.",
+                        isOn: $model.edits.style.hideIdleCursor)
+        ThemedToggleRow(title: "Hide cursor",
+                        isOn: Binding(get: { !model.edits.style.showCursor },
+                                      set: { model.edits.style.showCursor = !$0 }))
+
+        InspectorDivider()
+
+        InspectorSection("Click effect") {
+            ChipPicker(options: ClickEffect.allCases.map { ($0, $0.label) },
+                       selection: $model.edits.style.clickEffect)
         }
     }
 }
@@ -318,25 +337,21 @@ struct ZoomInspector: View {
     @ObservedObject var model: EditorModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionTitle("Camera")
-            LabeledSlider(title: "Smoothness", value: $model.edits.style.cameraSmoothing, range: 0...1)
-            Text("How lazily the camera follows the cursor while zoomed in.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        InspectorSection("Camera smoothness") {
+            ThemedSlider(value: $model.edits.style.cameraSmoothing, range: 0...1, defaultValue: defaults.cameraSmoothing)
+            Text("How gently the camera follows the cursor while zoomed in.")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textSecondary)
         }
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Zooms")
-            Text("\(model.edits.zooms.count) zoom\(model.edits.zooms.count == 1 ? "" : "s"). Double-click the zoom track or press Z to add one; select a zoom to change its level or focus.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+
+        InspectorDivider()
+
+        InspectorSection("Automatic zoom") {
+            Text("\(model.edits.zooms.count) zoom\(model.edits.zooms.count == 1 ? "" : "s") on the timeline. Click the zoom track to add one, or rebuild them from your clicks.")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button {
-                model.regenerateAutoZooms()
-            } label: {
-                Label("Regenerate Auto Zooms", systemImage: "wand.and.stars")
-            }
-            .help("Replaces automatic zooms with fresh ones built from your clicks. Zooms you've edited are kept.")
+            QuietButton(title: "Regenerate auto zooms") { model.regenerateAutoZooms() }
         }
     }
 }
@@ -347,18 +362,21 @@ struct AudioInspector: View {
     @ObservedObject var model: EditorModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionTitle("Volume")
-            if model.info.hasSystemAudio {
-                LabeledSlider(title: "System audio", value: $model.edits.style.systemVolume, range: 0...1)
+        if model.info.hasSystemAudio {
+            InspectorSection("System audio") {
+                ThemedSlider(value: $model.edits.style.systemVolume, range: 0...1, defaultValue: 1)
             }
-            if model.info.hasMicrophone {
-                LabeledSlider(title: "Microphone", value: $model.edits.style.micVolume, range: 0...1)
+        }
+        if model.info.hasMicrophone {
+            InspectorSection("Microphone") {
+                ThemedSlider(value: $model.edits.style.micVolume, range: 0...1, defaultValue: 1)
             }
-            if !model.info.hasSystemAudio && !model.info.hasMicrophone {
+        }
+        if !model.info.hasSystemAudio && !model.info.hasMicrophone {
+            InspectorSection("Audio") {
                 Text("No audio was recorded. Pick a microphone or turn on system audio from the menu bar before recording.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
