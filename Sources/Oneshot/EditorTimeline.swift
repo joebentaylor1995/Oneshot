@@ -6,6 +6,9 @@ import SwiftUI
 ///    speed-ups as labelled bands inside it; drag the clip's ends to trim
 ///  - indigo Zoom track: click empty space to add a zoom at that point
 /// Segments: drag the body to move, the edges to resize, click to select.
+///
+/// Drags that move or resize the view being dragged measure in window coordinates: measured locally,
+/// the view's own movement is subtracted from the drag, so edges lag behind the pointer and jitter.
 struct EditorTimeline: View {
     @ObservedObject var model: EditorModel
     private let inset: CGFloat = 16
@@ -230,7 +233,7 @@ struct TrimHandle: View {
             if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
         }
         .gesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(minimumDistance: 0, coordinateSpace: .global)
                 .onChanged { drag in
                     let start = anchor ?? value
                     if anchor == nil { anchor = start }
@@ -294,7 +297,7 @@ struct SegmentBar: View {
     }
 
     private func drag(_ part: DragPart) -> some Gesture {
-        DragGesture(minimumDistance: part == .body ? 3 : 0)
+        DragGesture(minimumDistance: part == .body ? 3 : 0, coordinateSpace: .global)
             .onChanged { value in
                 let base = anchor ?? (start: start, end: end)
                 if anchor == nil {
