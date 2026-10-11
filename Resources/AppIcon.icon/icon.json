@@ -1,48 +1,46 @@
 {
-  "fill": {
-    "solid": "srgb:0.07000,0.07000,0.08000,1.00000"
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.96783,0.00000,0.02980,1.00000"
   },
-  "groups": [
+  "groups" : [
     {
-      "layers": [
+      "layers" : [
         {
-          "glass": false,
-          "image-name-specializations": [
+          "glass-specializations" : [
             {
-              "value": "default.png"
+              "value" : true
             },
             {
-              "appearance": "dark",
-              "value": "dark.png"
-            },
-            {
-              "appearance": "tinted",
-              "value": "glass.png"
+              "idiom" : "square",
+              "value" : true
             }
           ],
-          "name": "Oneshot",
-          "position": {
-            "scale": 1,
-            "translation-in-points": [
+          "hidden" : false,
+          "image-name" : "Image.png",
+          "name" : "Image",
+          "position" : {
+            "scale" : 1.16,
+            "translation-in-points" : [
               0,
-              0
+              44
             ]
           }
         }
       ],
-      "name": "Artwork",
-      "shadow": {
-        "kind": "none",
-        "opacity": 0
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
       },
-      "specular": false,
-      "translucency": {
-        "enabled": false,
-        "value": 0
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
       }
     }
   ],
-  "supported-platforms": {
-    "squares": "shared"
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
   }
 }
