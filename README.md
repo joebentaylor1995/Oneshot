@@ -67,13 +67,10 @@ Signing with an Apple Development certificate avoids this (see the top of `build
 
 ## Updates
 
-Oneshot updates itself from this repo. It keeps its own clone in
-`~/Library/Application Support/Oneshot/Source`, checks GitHub on launch and every 30 minutes,
-and when there's a new commit on `main`:
-
-- shows **Install Update** in the menu bar menu, and
-- if **Install Updates Automatically** is on (the default) and you're not recording or editing,
-  pulls, builds with your Xcode, and relaunches on its own.
+Choose **Check for Updates** in the menu bar menu. Oneshot compares its build with `main` on
+this repo (using its own clone in `~/Library/Application Support/Oneshot/Source`), and if there
+are new commits it offers to install them: it pulls, builds with your Xcode, and relaunches.
+Nothing is checked or installed in the background.
 
 Builds are signed with the same local certificate, so Screen Recording permission carries over.
 The update log is at `~/Library/Logs/Oneshot/update.log` (menu › Show Update Log after a failure).

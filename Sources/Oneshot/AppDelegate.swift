@@ -61,10 +61,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.hotKeyPressed()
         }
 
-        updater.isBusy = { [weak self] in
-            guard let self else { return true }
-            return self.session != nil || self.isStarting || !self.editors.isEmpty
-        }
         updater.onChange = { [weak self] in self?.updaterStateChanged() }
         if let message = updater.consumeJustUpdatedMessage() {
             Task { @MainActor in
@@ -76,15 +72,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 alert.runModal()
             }
         }
-        updater.start()
     }
 
     private func updaterStateChanged() {
         guard session == nil else { return }
-        if case .updating = updater.state {
+        switch updater.state {
+        case .updating:
             showSavingState()
             statusItem.button?.toolTip = "Updating Oneshot…"
             statusItem.menu = menu
+        case .failed:
+            showIdleState()
+        default:
+            break
         }
     }
 
@@ -186,20 +186,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if updater.state != .updating && updater.state != .checking {
             menu.addItem(item("Check for Updates", #selector(checkForUpdates)))
         }
-        let auto = item("Install Updates Automatically", #selector(toggleAutoUpdate))
-        auto.state = updater.installsAutomatically ? .on : .off
-        menu.addItem(auto)
         let version = NSMenuItem(title: "Version \(updater.shortVersion)", action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
     }
 
     @objc private func checkForUpdates() {
-        Task { await updater.check(userInitiated: true) }
-    }
-
-    @objc private func toggleAutoUpdate() {
-        updater.installsAutomatically.toggle()
+        Task { @MainActor in
+            await updater.check()
+            NSApp.activate()
+            switch updater.state {
+            case .available:
+                installUpdate()
+            case .upToDate:
+                let alert = NSAlert()
+                alert.messageText = "Oneshot is up to date"
+                alert.informativeText = "You're on the latest version (\(updater.shortVersion))."
+                alert.runModal()
+            case .failed(let message):
+                let alert = NSAlert()
+                alert.messageText = "Couldn't check for updates"
+                alert.informativeText = message
+                alert.addButton(withTitle: "OK")
+                alert.addButton(withTitle: "Show Log")
+                if alert.runModal() == .alertSecondButtonReturn { updater.showLog() }
+            default:
+                break
+            }
+        }
     }
 
     @objc private func showUpdateLog() {
@@ -210,8 +224,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard session == nil, !isStarting else { return }
         NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = "Install the update?"
-        alert.informativeText = "Oneshot will build the new version (usually under a minute) and restart. Open editors are saved and closed."
+        if case .available(let count, let summary) = updater.state {
+            alert.messageText = "\(count) new change\(count == 1 ? "" : "s") available"
+            alert.informativeText = (summary.isEmpty ? "" : "Latest: \(summary)\n\n")
+                + "Oneshot will build the new version (usually under a minute) and restart. Open editors are saved and closed."
+        } else {
+            alert.messageText = "Install the update?"
+            alert.informativeText = "Oneshot will build the new version (usually under a minute) and restart. Open editors are saved and closed."
+        }
         alert.addButton(withTitle: "Install")
         alert.addButton(withTitle: "Not Now")
         guard alert.runModal() == .alertFirstButtonReturn else { return }

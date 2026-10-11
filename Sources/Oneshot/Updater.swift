@@ -4,7 +4,8 @@ import AppKit
 ///
 /// A private clone lives in ~/Library/Application Support/Oneshot/Source. Every build is stamped
 /// with its git commit (OneshotCommit in Info.plist), so comparing that with origin/main tells us
-/// whether a newer version exists. Installing pulls, runs build.sh (which signs with the same local
+/// whether a newer version exists. Nothing happens on its own: checking and installing are both
+/// started from the menu. Installing pulls, runs build.sh (which signs with the same local
 /// certificate, so permissions survive) and relaunches the app.
 @MainActor
 final class Updater {
@@ -19,22 +20,13 @@ final class Updater {
 
     static let repositoryURL = "https://github.com/joebentaylor1995/Oneshot.git"
     static let branch = "main"
-    private static let checkInterval: TimeInterval = 30 * 60
 
     private(set) var state: State = .idle { didSet { onChange?() } }
     var onChange: (() -> Void)?
-    /// True while recording or editing, so automatic installs wait.
-    var isBusy: () -> Bool = { false }
 
     let builtCommit = Bundle.main.object(forInfoDictionaryKey: "OneshotCommit") as? String ?? "unknown"
     let builtSubject = Bundle.main.object(forInfoDictionaryKey: "OneshotCommitSubject") as? String ?? ""
-    private var timer: Timer?
     private var installProcess: Process?
-
-    var installsAutomatically: Bool {
-        get { UserDefaults.standard.object(forKey: "autoUpdate") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "autoUpdate") }
-    }
 
     var shortVersion: String {
         builtCommit == "unknown" ? "local build" : String(builtCommit.prefix(7))
@@ -56,18 +48,6 @@ final class Updater {
 
     // MARK: Lifecycle
 
-    func start() {
-        Task { await check() }
-        let timer = Timer(timeInterval: Self.checkInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                Task { await self.check() }
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
-    }
-
     /// The commit message of the version that's now running, if it changed since the last launch.
     func consumeJustUpdatedMessage() -> String? {
         let defaults = UserDefaults.standard
@@ -79,7 +59,7 @@ final class Updater {
 
     // MARK: Checking
 
-    func check(userInitiated: Bool = false) async {
+    func check() async {
         switch state {
         case .checking, .updating: return
         default: break
@@ -123,10 +103,6 @@ final class Updater {
         }
         let count = max(1, Int(values["COUNT"] ?? "") ?? 1)
         state = .available(count: count, summary: values["SUBJECT"] ?? "")
-
-        if !userInitiated, installsAutomatically, !isBusy() {
-            install()
-        }
     }
 
     // MARK: Installing
