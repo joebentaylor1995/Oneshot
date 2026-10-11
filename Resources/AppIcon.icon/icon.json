@@ -1,0 +1,48 @@
+{
+  "fill": {
+    "solid": "srgb:0.07000,0.07000,0.08000,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "default.png"
+            },
+            {
+              "appearance": "dark",
+              "value": "dark.png"
+            },
+            {
+              "appearance": "tinted",
+              "value": "glass.png"
+            }
+          ],
+          "name": "Oneshot",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "name": "Artwork",
+      "shadow": {
+        "kind": "none",
+        "opacity": 0
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

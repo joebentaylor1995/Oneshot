@@ -36,6 +36,37 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/MenuBarIcon.png Resources/MenuBarIcon@2x.png "$APP/Contents/Resources/"
+
+echo "→ App icon"
+# Preferred: compile the Icon Composer package (light / dark / tinted) with Xcode's actool,
+# which produces Assets.car for macOS 26+ plus an AppIcon.icns for older systems.
+ACTOOL=""
+if xcrun --find actool >/dev/null 2>&1; then
+  ACTOOL="xcrun actool"
+elif [[ -x /Applications/Xcode.app/Contents/Developer/usr/bin/actool ]]; then
+  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+  ACTOOL="$DEVELOPER_DIR/usr/bin/actool"
+fi
+ICON_TMP="$(mktemp -d)"
+if [[ -n "$ACTOOL" && -d Resources/AppIcon.icon ]] && $ACTOOL \
+    --compile "$ICON_TMP" \
+    --platform macosx --target-device mac \
+    --minimum-deployment-target 15.0 \
+    --app-icon AppIcon --include-all-app-icons \
+    --output-partial-info-plist "$ICON_TMP/partial.plist" \
+    --output-format human-readable-text --errors --warnings \
+    Resources/Assets.xcassets Resources/AppIcon.icon && [[ -f "$ICON_TMP/Assets.car" ]]; then
+  cp "$ICON_TMP/Assets.car" "$APP/Contents/Resources/"
+  [[ -f "$ICON_TMP/AppIcon.icns" ]] && cp "$ICON_TMP/AppIcon.icns" "$APP/Contents/Resources/"
+  echo "  compiled AppIcon.icon with actool"
+fi
+# Fallback (or older-macOS copy): plain .icns from the iconset.
+if [[ ! -f "$APP/Contents/Resources/AppIcon.icns" ]]; then
+  iconutil -c icns Resources/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
+  echo "  built AppIcon.icns with iconutil"
+fi
+rm -rf "$ICON_TMP"
 
 echo "→ Signing ($SIGN_IDENTITY)"
 if ! codesign --force --sign "$SIGN_IDENTITY" "$APP"; then
@@ -54,6 +85,9 @@ if [[ "${1:-}" == "install" ]]; then
   rm -rf "/Applications/$APP_NAME.app"
   cp -R "$APP" /Applications/
   sleep 0.5
+  # Tell Finder/Dock the icon changed.
+  touch "/Applications/$APP_NAME.app"
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/$APP_NAME.app" >/dev/null 2>&1 || true
   open "/Applications/$APP_NAME.app" || { sleep 1.5; open "/Applications/$APP_NAME.app"; }
   echo "✓ Oneshot is running. Look for the record icon in your menu bar."
 else

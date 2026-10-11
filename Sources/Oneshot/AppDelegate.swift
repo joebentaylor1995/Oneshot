@@ -157,7 +157,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tickTimer = nil
         recordingStartedAt = nil
         guard let button = statusItem.button else { return }
-        let image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Oneshot")
+        // The lens glyph from the app icon (template image, tinted by macOS for light/dark menu bars).
+        let image = NSImage(named: "MenuBarIcon")
+            ?? NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Oneshot")
+        image?.size = NSSize(width: 18, height: 18)
         image?.isTemplate = true
         button.image = image
         button.title = ""
