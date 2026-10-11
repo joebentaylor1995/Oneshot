@@ -46,6 +46,9 @@ final class EditorModel: ObservableObject {
     var playhead: Double { clock.sourceTime }
     @Published private(set) var isPlaying = false
     @Published private(set) var thumbnails: [NSImage] = []
+    /// Audio peaks for the timeline (Waveform.bucketsPerSecond per second); empty if silent.
+    @Published private(set) var waveform: [Float] = []
+    @Published private(set) var waveformLoaded = false
     @Published private(set) var isLoaded = false
     @Published private(set) var loadError: String?
     @Published private(set) var canUndo = false
@@ -115,6 +118,8 @@ final class EditorModel: ObservableObject {
             rebuildSnapshot()
             await rebuildPlayerItem()
             isLoaded = true
+            waveform = await Waveform.load(from: sourceAsset, duration: sourceDuration)
+            waveformLoaded = true
             await generateThumbnails()
         } catch {
             loadError = error.localizedDescription

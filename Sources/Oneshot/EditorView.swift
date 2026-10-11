@@ -19,7 +19,7 @@ struct EditorView: View {
                     preview
                     transportRow
                     EditorTimeline(model: model)
-                        .frame(height: 120)
+                        .frame(height: EditorTimeline.contentHeight)
                         .padding(.bottom, 18)
                 }
                 .overlay(alignment: .topTrailing) {

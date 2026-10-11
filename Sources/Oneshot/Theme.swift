@@ -24,6 +24,10 @@ enum Theme {
     static let clipTop = Color(red: 0.698, green: 0.129, blue: 0.129)      // #B22121
     static let clipBottom = Color(red: 0.80, green: 0.169, blue: 0.169)    // #CC2B2B
     static let zoomTrack = Color(red: 0.149, green: 0.153, blue: 0.161)    // #262729
+    static let audioTrack = Color(red: 0.149, green: 0.153, blue: 0.161)   // timeline/audio-track
+    static let audioWave = Color.white.opacity(0.55)                       // timeline/audio-wave
+    static let audioWaveMuted = Color.white.opacity(0.16)                  // trimmed or cut away
+    static let sliderTrack = Color.white.opacity(0.14)                     // control/track
     static let zoomTop = Color(red: 0.47, green: 0.40, blue: 0.98)
     static let zoomBottom = Color(red: 0.37, green: 0.30, blue: 0.88)
 
@@ -149,14 +153,77 @@ struct ThemedSlider: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Slider(value: $value, in: range)
-                .controlSize(.small)
-                .tint(Theme.accentSoft)
+            GlassSlider(value: $value, range: range)
             if let defaultValue {
                 QuietButton(title: "Reset", enabled: abs(value - defaultValue) > 0.0001) {
                     value = defaultValue
                 }
             }
+        }
+    }
+}
+
+/// Slider with a Liquid Glass thumb (macOS 26): a white capsule at rest that turns into
+/// interactive glass and grows slightly while dragged, over a slim accent-filled track.
+/// Earlier macOS versions get a frosted-material thumb instead.
+struct GlassSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    @State private var dragging = false
+
+    private let trackHeight: CGFloat = 4
+    private let thumbSize = CGSize(width: 26, height: 16)
+
+    var body: some View {
+        GeometryReader { geo in
+            let span = range.upperBound - range.lowerBound
+            let fraction = span > 0 ? CGFloat(min(max((value - range.lowerBound) / span, 0), 1)) : 0
+            let travel = max(0, geo.size.width - thumbSize.width)
+            let x = travel * fraction
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.sliderTrack)
+                    .frame(height: trackHeight)
+                Capsule().fill(Theme.accentSoft)
+                    .frame(width: x + thumbSize.width / 2, height: trackHeight)
+                GlassThumb(active: dragging)
+                    .frame(width: thumbSize.width, height: thumbSize.height)
+                    .scaleEffect(dragging ? 1.18 : 1)
+                    .offset(x: x)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        dragging = true
+                        let f = (drag.location.x - thumbSize.width / 2) / max(travel, 1)
+                        value = range.lowerBound + Double(min(max(f, 0), 1)) * span
+                    }
+                    .onEnded { _ in dragging = false }
+            )
+            .animation(.spring(response: 0.28, dampingFraction: 0.68), value: dragging)
+        }
+        .frame(height: 22)
+        .accessibilityRepresentation {
+            Slider(value: $value, in: range)
+        }
+    }
+}
+
+private struct GlassThumb: View {
+    let active: Bool
+
+    var body: some View {
+        if #available(macOS 26.0, *) {
+            Capsule()
+                .fill(Color.white.opacity(active ? 0.08 : 0.92))
+                .glassEffect(.regular.interactive(), in: Capsule())
+                .shadow(color: .black.opacity(active ? 0.2 : 0.3), radius: active ? 6 : 2, y: 1)
+        } else {
+            Capsule()
+                .fill(active ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.white))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.55), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.3), radius: active ? 6 : 2, y: 1)
         }
     }
 }

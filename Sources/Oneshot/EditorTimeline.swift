@@ -4,7 +4,9 @@ import SwiftUI
 ///  - ruler with second labels and half-step dots (click or drag to scrub)
 ///  - amber Clip track: the trimmed recording, with cuts drawn as dark gaps and
 ///    speed-ups as labelled bands inside it; drag the clip's ends to trim
-///  - indigo Zoom track: click empty space to add a zoom at that point
+///  - Zoom track: click empty space to add a zoom at that point
+///  - Audio track: waveform of the recorded sound (system audio + microphone), dimmed where
+///    it's trimmed or cut away
 /// Segments: drag the body to move, the edges to resize, click to select.
 ///
 /// Drags that move or resize the view being dragged measure in window coordinates: measured locally,
@@ -15,6 +17,9 @@ struct EditorTimeline: View {
     private let rulerHeight: CGFloat = 26
     private let clipHeight: CGFloat = 38
     private let zoomHeight: CGFloat = 36
+    private let audioHeight: CGFloat = 32
+    /// Rows plus spacing; EditorView sizes the timeline from this.
+    static let contentHeight: CGFloat = 4 + 26 + 8 + 38 + 8 + 36 + 8 + 32
 
     var body: some View {
         GeometryReader { geo in
@@ -28,6 +33,8 @@ struct EditorTimeline: View {
                     .frame(width: width, height: clipHeight)
                 zoomTrack(width: width, pps: pps)
                     .frame(width: width, height: zoomHeight)
+                audioTrack(width: width, pps: pps)
+                    .frame(width: width, height: audioHeight)
             }
             .padding(.horizontal, inset)
             .padding(.top, 4)
@@ -182,6 +189,66 @@ struct EditorTimeline: View {
                     .offset(x: CGFloat(zoom.start) * pps)
             }
         }
+    }
+}
+
+// MARK: - Audio track
+
+extension EditorTimeline {
+    fileprivate func audioTrack(width: CGFloat, pps: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Theme.audioTrack)
+            if model.waveform.isEmpty {
+                Text(model.waveformLoaded ? "No audio recorded" : "Reading audio…")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Theme.textTertiary)
+            } else {
+                WaveformView(levels: model.waveform,
+                             pps: pps,
+                             trimStart: model.edits.trimStart,
+                             trimEnd: model.trimEnd,
+                             cuts: model.edits.cuts.map { ($0.start, $0.end) })
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in model.scrub(toSource: Double(value.location.x / pps)) }
+        )
+        .help("Audio")
+    }
+}
+
+/// Mirrored peak bars, one per waveform bucket.
+struct WaveformView: View {
+    let levels: [Float]
+    let pps: CGFloat
+    let trimStart: Double
+    let trimEnd: Double
+    let cuts: [(Double, Double)]
+
+    var body: some View {
+        Canvas { context, size in
+            let step = 1 / Waveform.bucketsPerSecond
+            let barWidth = max(1, CGFloat(step) * pps - 1)
+            let mid = size.height / 2
+            let maxHeight = size.height - 8
+            var kept = Path()
+            var removed = Path()
+            for (index, level) in levels.enumerated() {
+                let t = Double(index) * step
+                let height = max(1.5, CGFloat(level) * maxHeight)
+                let rect = CGRect(x: CGFloat(t) * pps, y: mid - height / 2, width: barWidth, height: height)
+                let isKept = t >= trimStart && t <= trimEnd && !cuts.contains { t >= $0.0 && t < $0.1 }
+                if isKept { kept.addRoundedRect(in: rect, cornerSize: CGSize(width: 0.5, height: 0.5)) }
+                else { removed.addRect(rect) }
+            }
+            context.fill(removed, with: .color(Theme.audioWaveMuted))
+            context.fill(kept, with: .color(Theme.audioWave))
+        }
+        .allowsHitTesting(false)
     }
 }
 
