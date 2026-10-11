@@ -77,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updaterStateChanged() {
         guard session == nil else { return }
         switch updater.state {
-        case .updating:
+        case .installing:
             showSavingState()
             statusItem.button?.toolTip = "Updating Oneshot…"
             statusItem.menu = menu
@@ -161,39 +161,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func addUpdateItems(to menu: NSMenu) {
-        guard updater.isEnabled else {
-            let version = NSMenuItem(title: "Oneshot \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(updater.shortVersion))",
-                                     action: nil, keyEquivalent: "")
-            version.isEnabled = false
-            menu.addItem(version)
-            return
-        }
         switch updater.state {
-        case .available(let count, let summary):
-            let install = item("Install Update (\(count) new change\(count == 1 ? "" : "s"))…", #selector(installUpdate))
+        case .available(let release):
+            let install = item("Update to Oneshot \(release.version)…", #selector(installUpdate))
             install.attributedTitle = NSAttributedString(string: install.title, attributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)])
-            if !summary.isEmpty { install.toolTip = "Latest: \(summary)" }
             menu.addItem(install)
-        case .updating:
+        case .installing:
             let busy = NSMenuItem(title: "Updating… Oneshot will restart when ready", action: nil, keyEquivalent: "")
             busy.isEnabled = false
             menu.addItem(busy)
-        case .failed(let message):
-            let failed = NSMenuItem(title: message, action: nil, keyEquivalent: "")
-            failed.isEnabled = false
-            menu.addItem(failed)
-            menu.addItem(item("Show Update Log", #selector(showUpdateLog)))
         case .checking:
             let checking = NSMenuItem(title: "Checking for updates…", action: nil, keyEquivalent: "")
             checking.isEnabled = false
             menu.addItem(checking)
-        case .idle, .upToDate:
+        case .idle, .upToDate, .failed:
             break
         }
-        if updater.state != .updating && updater.state != .checking {
+        if updater.state != .installing && updater.state != .checking {
             menu.addItem(item("Check for Updates", #selector(checkForUpdates)))
         }
-        let version = NSMenuItem(title: "Version \(updater.shortVersion)", action: nil, keyEquivalent: "")
+        let version = NSMenuItem(title: "Version \(updater.displayVersion)", action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
     }
@@ -208,42 +195,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case .upToDate:
                 let alert = NSAlert()
                 alert.messageText = "Oneshot is up to date"
-                alert.informativeText = "You're on the latest version (\(updater.shortVersion))."
+                alert.informativeText = "You're on the latest version (\(updater.version))."
                 alert.runModal()
             case .failed(let message):
-                let alert = NSAlert()
-                alert.messageText = "Couldn't check for updates"
-                alert.informativeText = message
-                alert.addButton(withTitle: "OK")
-                alert.addButton(withTitle: "Show Log")
-                if alert.runModal() == .alertSecondButtonReturn { updater.showLog() }
+                showUpdateProblem("Couldn't check for updates", message)
             default:
                 break
             }
         }
     }
 
-    @objc private func showUpdateLog() {
-        updater.showLog()
-    }
-
     @objc private func installUpdate() {
-        guard session == nil, !isStarting else { return }
+        guard case .available(let release) = updater.state else { return }
         NSApp.activate()
-        let alert = NSAlert()
-        if case .available(let count, let summary) = updater.state {
-            alert.messageText = "\(count) new change\(count == 1 ? "" : "s") available"
-            alert.informativeText = (summary.isEmpty ? "" : "Latest: \(summary)\n\n")
-                + "Oneshot will build the new version (usually under a minute) and restart. Open editors are saved and closed."
-        } else {
-            alert.messageText = "Install the update?"
-            alert.informativeText = "Oneshot will build the new version (usually under a minute) and restart. Open editors are saved and closed."
+        if session != nil || isStarting {
+            let alert = NSAlert()
+            alert.messageText = "Finish recording first"
+            alert.informativeText = "Oneshot \(release.version) can be installed once this recording has stopped."
+            alert.runModal()
+            return
         }
+        let alert = NSAlert()
+        alert.messageText = "Oneshot \(release.version) is available"
+        let notes = release.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        alert.informativeText = (notes.isEmpty ? "" : notes + "\n\n")
+            + "You have \(updater.version). Oneshot will download the update and restart. Open editors are saved and closed."
         alert.addButton(withTitle: "Install")
         alert.addButton(withTitle: "Not Now")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         for editor in editors { editor.window?.close() }
-        updater.install()
+        Task { @MainActor in
+            await updater.install(release)
+            // Only reached if it failed; on success Oneshot has already quit to be replaced.
+            if case .failed(let message) = updater.state {
+                showUpdateProblem("The update wasn't installed", message)
+            }
+        }
+    }
+
+    private func showUpdateProblem(_ title: String, _ message: String) {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Open Releases Page")
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSWorkspace.shared.open(Updater.releasesPage)
+        }
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {

@@ -65,16 +65,28 @@ tccutil reset ScreenCapture com.joebentaylor.oneshot
 
 Signing with an Apple Development certificate avoids this (see the top of `build.sh`).
 
-## Updates
+## Updates and releases
 
-Choose **Check for Updates** in the menu bar menu. Oneshot compares its build with `main` on
-this repo (using its own clone in `~/Library/Application Support/Oneshot/Source`), and if there
-are new commits it offers to install them: it pulls, builds with your Xcode, and relaunches.
-Nothing is checked or installed in the background.
+**Check for Updates** in the menu bar asks GitHub for the latest
+[release](https://github.com/joebentaylor1995/Oneshot/releases). If it's newer, Oneshot downloads
+the signed app, checks its signature, swaps it in and relaunches. No Xcode needed, and nothing
+happens in the background.
 
-Builds are signed with the same local certificate, so Screen Recording permission carries over.
-The update log is at `~/Library/Logs/Oneshot/update.log` (menu › Show Update Log after a failure).
-Needs Xcode (or its command line tools) and `git` access to the repo on that Mac.
+To ship a version, run on the Mac that holds the signing certificate:
+
+```bash
+./release.sh 2.2          # or just ./release.sh for the next patch version
+INSTALL=1 ./release.sh    # …and install it here too
+```
+
+It builds a universal app signed with the local certificate (so Screen Recording permission
+carries over between updates), uploads `Oneshot-<version>.zip` (what the updater downloads) and
+`Oneshot-<version>.dmg` (for sharing), and tags the commit. The release notes are the commit
+subjects since the last release.
+
+**Sharing:** send people the DMG from the releases page. The app isn't notarised, so the first
+time they open it they need **System Settings › Privacy & Security › Open Anyway**; after that,
+updates install without asking again.
 
 ## Where things go
 

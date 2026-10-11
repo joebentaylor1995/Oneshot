@@ -1,218 +1,223 @@
 import AppKit
 
-/// Keeps Oneshot up to date by building it from GitHub on this Mac.
+/// Updates Oneshot from GitHub Releases.
 ///
-/// A private clone lives in ~/Library/Application Support/Oneshot/Source. Every build is stamped
-/// with its git commit (OneshotCommit in Info.plist), so comparing that with origin/main tells us
-/// whether a newer version exists. Nothing happens on its own: checking and installing are both
-/// started from the menu. Installing pulls, runs build.sh (which signs with the same local
-/// certificate, so permissions survive) and relaunches the app.
+/// Each release (made with release.sh) carries a ready-built, signed Oneshot-x.y.z.zip. Checking
+/// asks GitHub for the latest release and compares its version with this build's; installing
+/// downloads the zip, checks it's a validly signed Oneshot, then swaps it in place of this copy and
+/// relaunches. Nothing is built on this Mac and nothing happens in the background: both steps are
+/// started from the menu.
 @MainActor
 final class Updater {
+    struct Release: Equatable {
+        let version: String
+        let notes: String
+        let download: URL
+    }
+
     enum State: Equatable {
         case idle
         case checking
         case upToDate
-        case available(count: Int, summary: String)
-        case updating
+        case available(Release)
+        case installing
         case failed(String)
     }
 
-    static let repositoryURL = "https://github.com/joebentaylor1995/Oneshot.git"
-    static let branch = "main"
+    static let repository = "joebentaylor1995/Oneshot"
+    static let releasesPage = URL(string: "https://github.com/\(repository)/releases")!
+    private static let latestReleaseAPI = URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!
 
     private(set) var state: State = .idle { didSet { onChange?() } }
     var onChange: (() -> Void)?
 
-    /// Copies made for other people (make-dmg.sh) don't update from the private repo.
-    let isEnabled = !(Bundle.main.object(forInfoDictionaryKey: "OneshotDistribution") as? Bool ?? false)
+    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     let builtCommit = Bundle.main.object(forInfoDictionaryKey: "OneshotCommit") as? String ?? "unknown"
-    let builtSubject = Bundle.main.object(forInfoDictionaryKey: "OneshotCommitSubject") as? String ?? ""
-    private var installProcess: Process?
 
-    var shortVersion: String {
-        builtCommit == "unknown" ? "local build" : String(builtCommit.prefix(7))
+    /// "2.1" or, for a build with a known commit, "2.1 (6857efc)".
+    var displayVersion: String {
+        builtCommit == "unknown" ? version : "\(version) (\(builtCommit.prefix(7)))"
     }
 
-    static var supportDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Oneshot", isDirectory: true)
-    }
-
-    static var sourceDirectory: URL { supportDirectory.appendingPathComponent("Source", isDirectory: true) }
-
-    static var logURL: URL {
-        let logs = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Logs/Oneshot", isDirectory: true)
-        try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
-        return logs.appendingPathComponent("update.log")
-    }
-
-    // MARK: Lifecycle
-
-    /// The commit message of the version that's now running, if it changed since the last launch.
+    /// A short note for the first launch after an update, if the version changed since last time.
     func consumeJustUpdatedMessage() -> String? {
         let defaults = UserDefaults.standard
-        let previous = defaults.string(forKey: "lastRunCommit")
-        defaults.set(builtCommit, forKey: "lastRunCommit")
-        guard let previous, previous != builtCommit, builtCommit != "unknown" else { return nil }
-        return builtSubject.isEmpty ? "Oneshot is now on version \(shortVersion)." : builtSubject
+        let previous = defaults.string(forKey: "lastRunVersion")
+        defaults.set(version, forKey: "lastRunVersion")
+        guard let previous, previous != version else { return nil }
+        return "You're now on Oneshot \(version)."
     }
 
     // MARK: Checking
 
     func check() async {
         switch state {
-        case .checking, .updating: return
+        case .checking, .installing: return
         default: break
         }
         state = .checking
 
-        let source = Self.sourceDirectory.path
-        let script = """
-        set -e
-        mkdir -p "\(Self.supportDirectory.path)"
-        if [ ! -d "\(source)/.git" ]; then
-          rm -rf "\(source)"
-          git clone --quiet --branch \(Self.branch) "\(Self.repositoryURL)" "\(source)"
-        fi
-        cd "\(source)"
-        git fetch --quiet origin \(Self.branch)
-        echo "REMOTE=$(git rev-parse origin/\(Self.branch))"
-        echo "SUBJECT=$(git log -1 --format=%s origin/\(Self.branch))"
-        echo "COUNT=$(git rev-list --count \(builtCommit)..origin/\(Self.branch) 2>/dev/null || echo 0)"
-        """
-        let result = await Self.run(script)
-        guard result.status == 0 else {
-            Self.appendLog("Update check failed:\n\(result.output)")
-            state = .failed(Self.describe(result.output))
-            return
+        var request = URLRequest(url: Self.latestReleaseAPI, cachePolicy: .reloadIgnoringLocalCacheData)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("Oneshot/\(version)", forHTTPHeaderField: "User-Agent")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
+            case 200: break
+            case 404:
+                state = .failed("No releases have been published yet.")
+                return
+            case 403, 429:
+                state = .failed("GitHub is limiting requests right now. Try again in a few minutes.")
+                return
+            case let code:
+                state = .failed("GitHub returned an error (\(code)). Try again later.")
+                return
+            }
+            let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+            let latest = release.tagName.hasPrefix("v") ? String(release.tagName.dropFirst()) : release.tagName
+            guard Self.compare(latest, version) == .orderedDescending else {
+                state = .upToDate
+                return
+            }
+            guard let asset = release.assets.first(where: { $0.name.hasSuffix(".zip") }) else {
+                state = .failed("Oneshot \(latest) doesn't have a download attached yet.")
+                return
+            }
+            state = .available(Release(version: latest, notes: release.body ?? "", download: asset.downloadURL))
+        } catch {
+            state = .failed("Couldn't reach GitHub. Check your connection and try again.")
         }
-
-        var values: [String: String] = [:]
-        for line in result.output.split(separator: "\n") {
-            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
-            if parts.count == 2 { values[parts[0]] = parts[1] }
-        }
-        guard let remote = values["REMOTE"], !remote.isEmpty else {
-            state = .failed("Couldn't read the latest version from GitHub.")
-            return
-        }
-
-        if remote == builtCommit {
-            state = .upToDate
-            return
-        }
-        let count = max(1, Int(values["COUNT"] ?? "") ?? 1)
-        state = .available(count: count, summary: values["SUBJECT"] ?? "")
     }
 
     // MARK: Installing
 
-    /// Pulls, builds and installs in a separate process. build.sh quits and relaunches Oneshot
-    /// once the new build is ready; if anything fails, this copy keeps running.
-    func install() {
-        guard state != .updating else { return }
-        guard Self.hasDeveloperTools else {
-            state = .failed("Xcode's command line tools are needed to build updates.")
-            return
-        }
-        state = .updating
-
-        let source = Self.sourceDirectory.path
-        let log = Self.logURL.path
-        let script = """
-        {
-          echo ""
-          echo "=== Update started $(date) ==="
-          set -e
-          cd "\(source)"
-          git fetch --quiet origin \(Self.branch)
-          git reset --hard --quiet origin/\(Self.branch)
-          git log -1 --format='Building %h  %s'
-          bash build.sh install
-          echo "=== Update finished $(date) ==="
-        } >> "\(log)" 2>&1
-        """
-        let process = Self.makeProcess(script)
-        process.terminationHandler = { [weak self] finished in
-            let status = finished.terminationStatus
-            Task { @MainActor [weak self] in
-                // On success build.sh has already relaunched the new Oneshot and quit this one.
-                guard let self, status != 0 else { return }
-                self.state = .failed("The update didn't build. This version is still installed.")
-            }
-        }
+    /// Downloads and verifies the release, then quits; a small helper swaps the app and relaunches it.
+    func install(_ release: Release) async {
+        guard state != .installing else { return }
+        state = .installing
         do {
-            try process.run()
-            installProcess = process
-        } catch {
-            state = .failed(error.localizedDescription)
-        }
-    }
+            let installed = Bundle.main.bundleURL
+            try Self.checkCanReplace(installed)
 
-    func showLog() {
-        if !FileManager.default.fileExists(atPath: Self.logURL.path) {
-            FileManager.default.createFile(atPath: Self.logURL.path, contents: Data())
+            let work = FileManager.default.temporaryDirectory
+                .appendingPathComponent("OneshotUpdate-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+
+            var request = URLRequest(url: release.download)
+            request.setValue("Oneshot/\(version)", forHTTPHeaderField: "User-Agent")
+            let (downloaded, response) = try await URLSession.shared.download(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                throw UpdateError("The download didn't finish. Try again.")
+            }
+            let zip = work.appendingPathComponent("Oneshot.zip")
+            try FileManager.default.moveItem(at: downloaded, to: zip)
+
+            guard await Self.runTool("/usr/bin/ditto", ["-x", "-k", zip.path, work.path]) == 0 else {
+                throw UpdateError("The download looks damaged. Try again.")
+            }
+            let fresh = work.appendingPathComponent("Oneshot.app")
+            guard Bundle(url: fresh)?.bundleIdentifier == Bundle.main.bundleIdentifier else {
+                throw UpdateError("The download isn't a copy of Oneshot.")
+            }
+            guard await Self.runTool("/usr/bin/codesign", ["--verify", "--deep", "--strict", fresh.path]) == 0 else {
+                throw UpdateError("The download's signature isn't valid, so it wasn't installed.")
+            }
+            _ = await Self.runTool("/usr/bin/xattr", ["-dr", "com.apple.quarantine", fresh.path])
+
+            try Self.launchSwapper(replacing: installed, with: fresh, workDirectory: work)
+            NSApp.terminate(nil)
+        } catch let error as UpdateError {
+            state = .failed(error.message)
+        } catch {
+            state = .failed("The update couldn't be installed: \(error.localizedDescription)")
         }
-        NSWorkspace.shared.open(Self.logURL)
     }
 
     // MARK: Helpers
 
-    private static var hasDeveloperTools: Bool {
-        FileManager.default.fileExists(atPath: "/Library/Developer/CommandLineTools/usr/bin/swift")
-            || FileManager.default.fileExists(atPath: "/Applications/Xcode.app/Contents/Developer/usr/bin/swift")
-            || FileManager.default.fileExists(atPath: "/Applications/Xcode.app")
+    private struct UpdateError: Error {
+        let message: String
+        init(_ message: String) { self.message = message }
     }
 
-    private static func describe(_ output: String) -> String {
-        let lower = output.lowercased()
-        if lower.contains("authentication") || lower.contains("could not read username") || lower.contains("repository not found") {
-            return "Couldn't sign in to GitHub to check for updates."
+    private struct GitHubRelease: Decodable {
+        struct Asset: Decodable {
+            let name: String
+            let downloadURL: URL
+            enum CodingKeys: String, CodingKey {
+                case name
+                case downloadURL = "browser_download_url"
+            }
         }
-        if lower.contains("could not resolve host") || lower.contains("unable to access") {
-            return "Couldn't reach GitHub. Check your connection."
-        }
-        return "Couldn't check for updates."
-    }
-
-    private static func appendLog(_ text: String) {
-        let line = "\n=== \(Date()) ===\n\(text)\n"
-        if let handle = try? FileHandle(forWritingTo: logURL) {
-            handle.seekToEndOfFile()
-            handle.write(Data(line.utf8))
-            try? handle.close()
-        } else {
-            try? Data(line.utf8).write(to: logURL)
+        let tagName: String
+        let body: String?
+        let assets: [Asset]
+        enum CodingKeys: String, CodingKey {
+            case tagName = "tag_name"
+            case body, assets
         }
     }
 
-    nonisolated private static func makeProcess(_ script: String) -> Process {
+    /// Numeric comparison of dotted versions ("2.10" is newer than "2.9").
+    static func compare(_ a: String, _ b: String) -> ComparisonResult {
+        let left = a.split(separator: ".").map { Int($0) ?? 0 }
+        let right = b.split(separator: ".").map { Int($0) ?? 0 }
+        for index in 0..<max(left.count, right.count) {
+            let l = index < left.count ? left[index] : 0
+            let r = index < right.count ? right[index] : 0
+            if l != r { return l < r ? .orderedAscending : .orderedDescending }
+        }
+        return .orderedSame
+    }
+
+    private static func checkCanReplace(_ installed: URL) throws {
+        let path = installed.path
+        if path.contains("/AppTranslocation/") || path.hasPrefix("/Volumes/") {
+            throw UpdateError("Drag Oneshot into your Applications folder and open it from there, then try again.")
+        }
+        guard FileManager.default.isWritableFile(atPath: installed.deletingLastPathComponent().path) else {
+            throw UpdateError("Oneshot can't replace itself in \(installed.deletingLastPathComponent().path). Download the update from GitHub instead.")
+        }
+    }
+
+    /// Starts a detached script that waits for this process to quit, moves the old app aside,
+    /// puts the new one in its place (restoring the old one if that fails) and opens it.
+    private static func launchSwapper(replacing installed: URL, with fresh: URL, workDirectory: URL) throws {
+        func quoted(_ url: URL) -> String { "'" + url.path.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let old = workDirectory.appendingPathComponent("Previous.app")
+        let script = """
+        while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
+        if mv \(quoted(installed)) \(quoted(old)); then
+          if ! mv \(quoted(fresh)) \(quoted(installed)); then mv \(quoted(old)) \(quoted(installed)); fi
+        fi
+        touch \(quoted(installed))
+        open \(quoted(installed))
+        sleep 2
+        rm -rf \(quoted(workDirectory))
+        """
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = ["-c", script]
-        var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
-        environment["GIT_TERMINAL_PROMPT"] = "0" // never hang waiting for a password
-        process.environment = environment
-        return process
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
     }
 
-    nonisolated private static func run(_ script: String) async -> (status: Int32, output: String) {
+    nonisolated private static func runTool(_ path: String, _ arguments: [String]) async -> Int32 {
         await Task.detached(priority: .utility) {
-            let process = makeProcess(script)
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: path)
+            process.arguments = arguments
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
             do {
                 try process.run()
             } catch {
-                return (Int32(-1), error.localizedDescription)
+                return Int32(-1)
             }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
-            return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+            return process.terminationStatus
         }.value
     }
 }

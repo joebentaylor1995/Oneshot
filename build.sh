@@ -31,7 +31,7 @@ for LOCAL_CERT in "Oneshot Local Signing" "Reel Local Signing"; do
 done
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 
-# UNIVERSAL=1 builds for Apple Silicon and Intel (used for the shareable DMG).
+# UNIVERSAL=1 builds for Apple Silicon and Intel (release.sh uses it).
 SWIFT_ARGS=(-c release)
 if [[ "${UNIVERSAL:-}" == "1" ]]; then SWIFT_ARGS+=(--arch arm64 --arch x86_64); fi
 echo "→ Compiling (release${UNIVERSAL:+, universal})"
@@ -47,10 +47,14 @@ COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 SUBJECT="$(git log -1 --format=%s 2>/dev/null || true)"
 plutil -insert OneshotCommit -string "$COMMIT" "$APP/Contents/Info.plist"
 plutil -insert OneshotCommitSubject -string "$SUBJECT" "$APP/Contents/Info.plist"
-# DISTRIBUTION=1 marks a copy for someone else's Mac: no self-updating from this repo.
-if [[ "${DISTRIBUTION:-}" == "1" ]]; then
-  plutil -insert OneshotDistribution -bool YES "$APP/Contents/Info.plist"
+# Version: VERSION from the environment (release.sh sets it), else the latest v* tag.
+if [[ -z "${VERSION:-}" ]]; then
+  VERSION="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//' || true)"
 fi
+if [[ -n "$VERSION" ]]; then
+  plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
+fi
+plutil -replace CFBundleVersion -string "$(git rev-list --count HEAD 2>/dev/null || echo 1)" "$APP/Contents/Info.plist"
 cp Resources/MenuBarIcon.png Resources/MenuBarIcon@2x.png "$APP/Contents/Resources/"
 
 echo "→ App icon"
