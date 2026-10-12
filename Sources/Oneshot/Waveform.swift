@@ -43,9 +43,10 @@ enum Waveform {
             guard let block = CMSampleBufferGetDataBuffer(buffer) else { continue }
             let length = CMBlockBufferGetDataLength(block)
             guard length >= 2 else { continue }
+            let byteCount = (length / 2) * 2
             var samples = [Int16](repeating: 0, count: length / 2)
             let status = samples.withUnsafeMutableBytes { raw in
-                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: samples.count * 2, destination: raw.baseAddress!)
+                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: byteCount, destination: raw.baseAddress!)
             }
             guard status == kCMBlockBufferNoErr else { continue }
             for sample in samples {
