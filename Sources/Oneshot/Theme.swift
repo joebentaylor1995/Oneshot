@@ -327,6 +327,58 @@ struct IconButton: View {
     }
 }
 
+/// Floppy-disk glyph (SF Symbols has none), drawn to sit with the 14pt medium symbols.
+struct FloppyDiskShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = min(rect.width, rect.height) / 14
+        let o = CGPoint(x: rect.midX - 7 * s, y: rect.midY - 7 * s)
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: o.x + x * s, y: o.y + y * s) }
+        var path = Path()
+        // Body with the clipped top-right corner.
+        path.move(to: p(2.6, 1.5))
+        path.addLine(to: p(10.2, 1.5))
+        path.addLine(to: p(12.5, 3.8))
+        path.addLine(to: p(12.5, 11.4))
+        path.addQuadCurve(to: p(11.4, 12.5), control: p(12.5, 12.5))
+        path.addLine(to: p(2.6, 12.5))
+        path.addQuadCurve(to: p(1.5, 11.4), control: p(1.5, 12.5))
+        path.addLine(to: p(1.5, 2.6))
+        path.addQuadCurve(to: p(2.6, 1.5), control: p(1.5, 1.5))
+        path.closeSubpath()
+        // Metal shutter at the top.
+        path.addRoundedRect(in: CGRect(origin: p(4.2, 1.5), size: CGSize(width: 5 * s, height: 3.4 * s)),
+                            cornerSize: CGSize(width: 0.6 * s, height: 0.6 * s))
+        // Label at the bottom.
+        path.addRoundedRect(in: CGRect(origin: p(3.6, 7.6), size: CGSize(width: 6.8 * s, height: 4.9 * s)),
+                            cornerSize: CGSize(width: 0.8 * s, height: 0.8 * s))
+        return path
+    }
+}
+
+/// Save button for the editor's top bar: a floppy disk, tinted once the recording is saved.
+struct SaveButton: View {
+    let isSaved: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            FloppyDiskShape()
+                .stroke(isSaved ? Theme.accentSoft : Theme.text, style: StrokeStyle(lineWidth: 1.3, lineJoin: .round))
+                .frame(width: 15, height: 15)
+                .frame(width: 30, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(isSaved ? Theme.controlSelected : (hovering ? Theme.controlHover : .clear))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isSaved ? "Saved. Click to rename (⌘S)" : "Save recording (⌘S). Unsaved recordings go to the Trash when closed, unless exported.")
+        .onHover { hovering = $0 }
+    }
+}
+
 /// Filled accent button (Export).
 struct AccentButton: View {
     let title: String

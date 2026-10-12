@@ -34,6 +34,9 @@ struct EditorView: View {
                     .padding(.bottom, 18)
             }
         }
+        // Start at the very top of the window, so the top bar shares the title bar with the
+        // native traffic lights instead of sitting underneath it.
+        .ignoresSafeArea(.container, edges: .top)
         .background(WindowGlass())
         .environment(\.colorScheme, .dark)
         .frame(minWidth: 1100, minHeight: 720)
@@ -58,9 +61,7 @@ struct EditorView: View {
                 IconButton(systemName: "arrow.uturn.backward", help: "Undo (⌘Z)", enabled: model.canUndo) { model.undo() }
                 IconButton(systemName: "arrow.uturn.forward", help: "Redo (⇧⌘Z)", enabled: model.canRedo) { model.redo() }
                 Rectangle().fill(Theme.hairline).frame(width: 1, height: 18).padding(.horizontal, 8)
-                IconButton(systemName: model.isKept ? "checkmark.circle" : "square.and.arrow.down",
-                           help: model.isKept ? "Saved — click to rename (⌘S)" : "Save recording (⌘S). Unsaved recordings are deleted when closed unless exported.",
-                           isActive: model.isKept) {
+                SaveButton(isSaved: model.isKept) {
                     saveName = model.name
                     model.showingSavePrompt = true
                 }

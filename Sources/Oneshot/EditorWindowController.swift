@@ -25,6 +25,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         window.titleVisibility = .hidden
         window.toolbar = NSToolbar(identifier: "OneshotEditor")
         window.toolbarStyle = .unified
+        window.titlebarSeparatorStyle = .none
         window.appearance = NSAppearance(named: .darkAqua)
         // Glass: the SwiftUI WindowGlass background shows the blurred desktop through.
         window.isOpaque = false
