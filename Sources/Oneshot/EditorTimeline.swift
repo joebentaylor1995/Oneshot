@@ -360,10 +360,20 @@ struct SegmentBar: View {
         .onTapGesture { onSelect() }
     }
 
+    /// Drag zone at each end. When the segment is selected it shows the same trim grip as the
+    /// clip track, so it's clear the ends can be dragged.
     private func edge(_ part: DragPart) -> some View {
-        Color.clear
-            .frame(width: 8)
-            .contentShape(Rectangle())
+        ZStack {
+            Color.clear
+            if isSelected {
+                Capsule()
+                    .fill(Color.white.opacity(0.95))
+                    .frame(width: 3, height: 16)
+                    .shadow(color: .black.opacity(0.35), radius: 1.5)
+            }
+        }
+        .frame(width: 10)
+        .contentShape(Rectangle())
             .onHover { inside in
                 if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
             }
