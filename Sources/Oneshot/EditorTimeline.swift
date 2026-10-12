@@ -17,9 +17,9 @@ struct EditorTimeline: View {
     private let rulerHeight: CGFloat = 26
     private let clipHeight: CGFloat = 38
     private let zoomHeight: CGFloat = 36
-    private let audioHeight: CGFloat = 32
+    private let audioHeight: CGFloat = 36
     /// Rows plus spacing; EditorView sizes the timeline from this.
-    static let contentHeight: CGFloat = 4 + 26 + 8 + 38 + 8 + 36 + 8 + 32
+    static let contentHeight: CGFloat = 4 + 26 + 8 + 38 + 8 + 36 + 8 + 36
 
     var body: some View {
         GeometryReader { geo in
@@ -90,7 +90,7 @@ struct EditorTimeline: View {
         return ZStack(alignment: .topLeading) {
             // Trimmed-away parts stay visible as an empty lane so they can be dragged back.
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.white.opacity(0.03))
+                .fill(Theme.lane)
                 .contentShape(Rectangle())
                 .gesture(scrubGesture(pps: pps))
 
@@ -210,6 +210,13 @@ extension EditorTimeline {
                              trimEnd: model.trimEnd,
                              cuts: model.edits.cuts.map { ($0.start, $0.end) })
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                if (model.waveform.max() ?? 0) < 0.04 {
+                    Text("Silent: no sound was playing while recording")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                        .padding(.horizontal, 8)
+                        .background(Capsule().fill(Theme.window.opacity(0.6)))
+                }
             }
         }
         .contentShape(Rectangle())

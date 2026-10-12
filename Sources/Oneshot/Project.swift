@@ -190,6 +190,9 @@ struct ProjectEdits: Codable, Equatable {
 ///   cursor.json     CursorTrack
 ///   cursors/*.png   captured cursor images
 ///   edits.json      ProjectEdits (autosaved)
+///   name.txt        the recording's name ("Untitled" until saved)
+///   .draft          present until the recording is saved or exported; drafts are
+///                   moved to the Trash when their editor closes
 struct ProjectFolder: Equatable {
     let url: URL
 
@@ -198,7 +201,36 @@ struct ProjectFolder: Equatable {
     var cursorURL: URL { url.appendingPathComponent("cursor.json") }
     var cursorsURL: URL { url.appendingPathComponent("cursors", isDirectory: true) }
     var editsURL: URL { url.appendingPathComponent("edits.json") }
-    var displayName: String { url.lastPathComponent }
+    var nameURL: URL { url.appendingPathComponent("name.txt") }
+    var draftURL: URL { url.appendingPathComponent(".draft") }
+
+    static let defaultName = "Untitled"
+
+    /// The recording's name; older recordings (before names existed) use their folder name.
+    var displayName: String {
+        if let name = try? String(contentsOf: nameURL, encoding: .utf8) {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return url.lastPathComponent
+    }
+
+    /// True until the recording is saved or exported.
+    var isDraft: Bool { FileManager.default.fileExists(atPath: draftURL.path) }
+
+    func rename(to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        try? (trimmed.isEmpty ? Self.defaultName : trimmed).write(to: nameURL, atomically: true, encoding: .utf8)
+    }
+
+    /// Keeps the recording when its editor closes.
+    func keep() { try? FileManager.default.removeItem(at: draftURL) }
+
+    /// Moves an unsaved, unexported recording to the Trash (recoverable from there).
+    func discardIfDraft() {
+        guard isDraft else { return }
+        try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    }
 
     static func create(date: Date = Date()) throws -> ProjectFolder {
         let formatter = DateFormatter()
@@ -206,6 +238,8 @@ struct ProjectFolder: Equatable {
         let url = Paths.projects.appendingPathComponent("Recording \(formatter.string(from: date))", isDirectory: true)
         let project = ProjectFolder(url: url)
         try FileManager.default.createDirectory(at: project.cursorsURL, withIntermediateDirectories: true)
+        project.rename(to: defaultName)
+        FileManager.default.createFile(atPath: project.draftURL.path, contents: Data())
         return project
     }
 

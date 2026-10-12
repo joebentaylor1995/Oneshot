@@ -5,6 +5,7 @@ struct EditorView: View {
     @ObservedObject var model: EditorModel
     @StateObject private var exporter = ExportModel()
     @State private var showingExport = false
+    @State private var saveName = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,7 +50,7 @@ struct EditorView: View {
             WindowDragArea()
 
             HStack(spacing: 4) {
-                Color.clear.frame(width: 72, height: 1) // traffic lights
+                Color.clear.frame(width: max(0, model.chrome.leading - 12), height: 1) // traffic lights
                 IconButton(systemName: "folder", help: "Show recording in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([model.project.url])
                 }
@@ -57,6 +58,12 @@ struct EditorView: View {
                 IconButton(systemName: "arrow.uturn.backward", help: "Undo (⌘Z)", enabled: model.canUndo) { model.undo() }
                 IconButton(systemName: "arrow.uturn.forward", help: "Redo (⇧⌘Z)", enabled: model.canRedo) { model.redo() }
                 Rectangle().fill(Theme.hairline).frame(width: 1, height: 18).padding(.horizontal, 8)
+                IconButton(systemName: model.isKept ? "checkmark.circle" : "square.and.arrow.down",
+                           help: model.isKept ? "Saved — click to rename (⌘S)" : "Save recording (⌘S). Unsaved recordings are deleted when closed unless exported.",
+                           isActive: model.isKept) {
+                    saveName = model.name
+                    model.showingSavePrompt = true
+                }
                 AccentButton(title: "Export", systemImage: "square.and.arrow.up", enabled: model.isLoaded) {
                     exporter.reset()
                     showingExport = true
@@ -66,7 +73,7 @@ struct EditorView: View {
             .padding(.horizontal, 12)
 
             HStack(spacing: 0) {
-                Text(model.project.displayName)
+                Text(model.name)
                     .foregroundStyle(Theme.text)
                 Text(".oneshot")
                     .foregroundStyle(Theme.textTertiary)
@@ -75,7 +82,14 @@ struct EditorView: View {
             .lineLimit(1)
             .allowsHitTesting(false)
         }
-        .frame(height: 52)
+        .frame(height: model.chrome.height)
+        .alert("Save recording", isPresented: $model.showingSavePrompt) {
+            TextField("Name", text: $saveName)
+            Button("Save") { model.save(as: saveName) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Saved recordings stay in Open Recent. Recordings that aren't saved or exported are moved to the Trash when you close them.")
+        }
     }
 
     // MARK: Canvas

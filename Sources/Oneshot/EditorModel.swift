@@ -53,6 +53,17 @@ final class EditorModel: ObservableObject {
     @Published private(set) var loadError: String?
     @Published private(set) var canUndo = false
     @Published private(set) var canRedo = false
+    @Published private(set) var name: String
+    /// Saved or exported: kept when the editor closes. Unsaved drafts go to the Trash.
+    @Published private(set) var isKept: Bool
+    @Published var showingSavePrompt = false
+    /// Where the native traffic lights sit, so the top bar can line up with them.
+    @Published var chrome = WindowChrome()
+
+    struct WindowChrome: Equatable {
+        var height: CGFloat = 52
+        var leading: CGFloat = 84
+    }
 
     private var undoStack: [ProjectEdits] = []
     private var redoStack: [ProjectEdits] = []
@@ -77,6 +88,8 @@ final class EditorModel: ObservableObject {
         guard let info = project.loadInfo() else { throw OneshotError.projectUnreadable }
         self.project = project
         self.info = info
+        name = project.displayName
+        isKept = !project.isDraft
         cursorTrack = project.loadCursor() ?? CursorTrack()
         let edits = project.loadEdits() ?? ProjectEdits()
         self.edits = edits
@@ -561,6 +574,18 @@ final class EditorModel: ObservableObject {
             guard !Task.isCancelled else { return }
             project.saveEdits(edits)
         }
+    }
+
+    func save(as newName: String) {
+        project.rename(to: newName)
+        project.keep()
+        name = project.displayName
+        isKept = true
+    }
+
+    func markKept() {
+        project.keep()
+        isKept = true
     }
 
     func teardown() {

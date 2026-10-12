@@ -51,6 +51,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Lifecycle
 
+    func applicationWillTerminate(_ notification: Notification) {
+        for editor in editors {
+            editor.model.teardown()
+            editor.discardIfDraft()
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         menu.delegate = self
@@ -222,11 +229,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.messageText = "Oneshot \(release.version) is available"
         let notes = release.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         alert.informativeText = (notes.isEmpty ? "" : notes + "\n\n")
-            + "You have \(updater.version). Oneshot will download the update and restart. Open editors are saved and closed."
+            + "You have \(updater.version). Oneshot will download the update and restart. Open editors are closed; unsaved recordings are kept."
         alert.addButton(withTitle: "Install")
         alert.addButton(withTitle: "Not Now")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        for editor in editors { editor.window?.close() }
+        for editor in editors {
+            editor.keepsDraftOnClose = true
+            editor.window?.close()
+        }
         Task { @MainActor in
             await updater.install(release)
             // Only reached if it failed; on success Oneshot has already quit to be replaced.

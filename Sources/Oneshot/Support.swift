@@ -45,8 +45,16 @@ enum Paths {
         return folder
     }
 
+    /// ~/Movies/Oneshot/<name>.mp4, or "<name> 2.mp4", "<name> 3.mp4"… if that's taken.
     static func exportURL(name: String, fileExtension: String) -> URL {
-        root.appendingPathComponent(name).appendingPathExtension(fileExtension)
+        let safe = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        var url = root.appendingPathComponent(safe).appendingPathExtension(fileExtension)
+        var index = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = root.appendingPathComponent("\(safe) \(index)").appendingPathExtension(fileExtension)
+            index += 1
+        }
+        return url
     }
 }
 

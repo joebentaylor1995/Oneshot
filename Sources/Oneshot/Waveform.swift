@@ -3,6 +3,7 @@ import AVFoundation
 /// Peak levels of a recording's audio for the timeline's audio track.
 enum Waveform {
     static let bucketsPerSecond = 20.0
+    static let floorDB = 54.0
 
     /// One level (0…1) per 1/20 s across the whole recording, with every audio track
     /// (system audio and microphone) mixed together. Empty if there's no audio.
@@ -59,7 +60,12 @@ enum Waveform {
             }
         }
         guard reader.status == .completed || reader.status == .reading else { return [] }
-        // Square-root scaling so quiet speech is still visible next to loud system audio.
-        return peaks.map { Float((Double($0) / 32_768).squareRoot()) }
+        // Decibel scale (-54 dB floor), like an audio editor: speech and music fill the lane
+        // while background hiss stays near the centre line.
+        return peaks.map { peak in
+            let amplitude = max(Double(peak) / 32_768, 1e-6)
+            let db = 20 * log10(amplitude)
+            return Float(max(0, min(1, (db + floorDB) / floorDB)))
+        }
     }
 }

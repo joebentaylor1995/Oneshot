@@ -56,6 +56,7 @@ final class ExportModel: ObservableObject {
                 let size = editor.canvasSize(shortSide: CGFloat(self.shortSide))
                 self.resultInfo = "\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) · \(Int(size.width))×\(Int(size.height)) · \(formatTime(editor.outputDuration))"
                 self.state = .done(url)
+                editor.markKept()
                 NSSound(named: "Glass")?.play()
             } catch is CancellationError {
                 try? FileManager.default.removeItem(at: url)

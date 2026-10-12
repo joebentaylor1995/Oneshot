@@ -23,8 +23,10 @@ enum Theme {
 
     static let clipTop = Color(red: 0.698, green: 0.129, blue: 0.129)      // #B22121
     static let clipBottom = Color(red: 0.80, green: 0.169, blue: 0.169)    // #CC2B2B
-    static let zoomTrack = Color(red: 0.149, green: 0.153, blue: 0.161)    // #262729
-    static let audioTrack = Color(red: 0.149, green: 0.153, blue: 0.161)   // timeline/audio-track
+    /// Background of every timeline lane (clip, zoom, audio): timeline/lane.
+    static let lane = Color.white.opacity(0.03)
+    static let zoomTrack = lane
+    static let audioTrack = lane
     static let audioWave = Color.white.opacity(0.55)                       // timeline/audio-wave
     static let audioWaveMuted = Color.white.opacity(0.16)                  // trimmed or cut away
     static let sliderTrack = Color.white.opacity(0.14)                     // control/track
