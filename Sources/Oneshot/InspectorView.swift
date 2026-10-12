@@ -143,84 +143,57 @@ struct FocusPicker: View {
 
 // MARK: - Background
 
-private enum BackgroundKind: Hashable {
-    case wallpaper, gradient, color, image
-}
-
+/// Background picker: Color (solid or gradient) or Image (macOS wallpapers or your own image).
 struct BackgroundInspector: View {
     @ObservedObject var model: EditorModel
-    @State private var kindOverride: BackgroundKind?
+    @State private var kindOverride: Kind?
+    @State private var colorModeOverride: ColorMode?
 
-    private var kind: BackgroundKind {
+    private enum Kind: Hashable { case color, image }
+    private enum ColorMode: Hashable { case solid, gradient }
+
+    private static let solidPresets: [RGBColor] = [
+        RGBColor(hex: 0xFFFFFF), RGBColor(hex: 0xF2F2F4), RGBColor(hex: 0x8E8E93),
+        RGBColor(hex: 0x2C2C2E), RGBColor(hex: 0x121212), RGBColor(hex: 0x1653FF),
+        RGBColor(hex: 0x6B59FA), RGBColor(hex: 0xFF5F57), RGBColor(hex: 0xFEBC2E), RGBColor(hex: 0x28C840),
+    ]
+
+    private var style: BackgroundStyle { model.edits.style.background }
+
+    private var kind: Kind {
         if let kindOverride { return kindOverride }
-        switch model.edits.style.background {
-        case .wallpaper: return .wallpaper
-        case .gradient: return .gradient
-        case .color: return .color
-        case .image: return .image
+        switch style {
+        case .color, .gradient: return .color
+        case .wallpaper, .image: return .image
         }
+    }
+
+    private var colorMode: ColorMode {
+        if let colorModeOverride { return colorModeOverride }
+        if case .color = style { return .solid }
+        return .gradient
     }
 
     var body: some View {
         InspectorSection("Background") {
-            ChipPicker(options: [(BackgroundKind.wallpaper, "Wallpaper"), (.gradient, "Gradient"), (.color, "Color"), (.image, "Image")],
+            ChipPicker(options: [(Kind.color, "Color"), (.image, "Image")],
                        selection: Binding(get: { kind }, set: { kindOverride = $0 }))
         }
 
         switch kind {
-        case .wallpaper:
-            if Backgrounds.wallpapers.isEmpty {
-                Text("No macOS wallpapers found.").font(.system(size: 11.5)).foregroundStyle(Theme.textSecondary)
-            } else {
-                InspectorSection("Wallpaper") {
-                    HStack {
-                        QuietButton(title: "Pick random wallpaper") {
-                            if let url = Backgrounds.wallpapers.randomElement() {
-                                model.edits.style.background = .wallpaper(url.path)
-                            }
-                        }
-                    }
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
-                        ForEach(Backgrounds.wallpapers, id: \.self) { url in
-                            WallpaperThumb(url: url, isSelected: model.edits.style.background == .wallpaper(url.path)) {
-                                model.edits.style.background = .wallpaper(url.path)
-                            }
-                        }
-                    }
-                }
-            }
-        case .gradient:
-            InspectorSection("Gradient") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
-                    ForEach(Backgrounds.gradients.indices, id: \.self) { index in
-                        let gradient = Backgrounds.gradients[index]
-                        RoundedRectangle(cornerRadius: 7)
-                            .fill(LinearGradient(colors: [gradient.a.color, gradient.b.color],
-                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .aspectRatio(1, contentMode: .fit)
-                            .overlay(selectionRing(model.edits.style.background == .gradient(index)))
-                            .contentShape(Rectangle())
-                            .onTapGesture { model.edits.style.background = .gradient(index) }
-                            .help(gradient.name)
-                    }
-                }
-            }
         case .color:
-            InspectorSection("Color") {
-                ColorPicker("Background colour", selection: colorBinding, supportsOpacity: false)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
+            InspectorSection("Fill") {
+                ChipPicker(options: [(ColorMode.solid, "Solid"), (.gradient, "Gradient")],
+                           selection: Binding(get: { colorMode }, set: { colorModeOverride = $0 }))
+                switch colorMode {
+                case .solid: solidPicker
+                case .gradient: gradientPicker
+                }
             }
         case .image:
-            InspectorSection("Image") {
-                QuietButton(title: "Choose image…") { chooseImage() }
-                if case .image(let path) = model.edits.style.background {
-                    Text(URL(fileURLWithPath: path).lastPathComponent)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
-                }
-            }
+            wallpaperSection
+            InspectorDivider()
+            customImageSection
         }
 
         InspectorDivider()
@@ -240,14 +213,103 @@ struct BackgroundInspector: View {
         }
     }
 
+    // MARK: Color
+
+    private var solidPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
+                ForEach(Self.solidPresets.indices, id: \.self) { index in
+                    let preset = Self.solidPresets[index]
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(preset.color)
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.hairline, lineWidth: 1))
+                        .overlay(selectionRing(style == .color(preset)))
+                        .contentShape(Rectangle())
+                        .onTapGesture { model.edits.style.background = .color(preset) }
+                }
+            }
+            ColorPicker(selection: colorBinding, supportsOpacity: false) {
+                Text("Custom colour")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        }
+    }
+
+    private var gradientPicker: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
+            ForEach(Backgrounds.gradients.indices, id: \.self) { index in
+                let gradient = Backgrounds.gradients[index]
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(LinearGradient(colors: [gradient.a.color, gradient.b.color],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(selectionRing(style == .gradient(index)))
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.edits.style.background = .gradient(index) }
+                    .help(gradient.name)
+            }
+        }
+    }
+
     private var colorBinding: Binding<Color> {
         Binding(
             get: {
-                if case .color(let color) = model.edits.style.background { return color.color }
+                if case .color(let color) = style { return color.color }
                 return .white
             },
             set: { model.edits.style.background = .color(RGBColor(color: $0)) }
         )
+    }
+
+    // MARK: Image
+
+    private var wallpaperSection: some View {
+        InspectorSection("Wallpapers", trailing: Backgrounds.wallpapers.isEmpty ? nil : AnyView(
+            QuietButton(title: "Random") {
+                if let url = Backgrounds.wallpapers.randomElement() {
+                    model.edits.style.background = .wallpaper(url.path)
+                }
+            }
+        )) {
+            if Backgrounds.wallpapers.isEmpty {
+                Text("No macOS wallpapers found.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.textSecondary)
+            } else {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
+                    ForEach(Backgrounds.wallpapers, id: \.self) { url in
+                        WallpaperThumb(url: url, isSelected: style == .wallpaper(url.path)) {
+                            model.edits.style.background = .wallpaper(url.path)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var customImageSection: some View {
+        InspectorSection("Custom image") {
+            HStack(spacing: 10) {
+                if case .image(let path) = style {
+                    WallpaperThumb(url: URL(fileURLWithPath: path), isSelected: true) {}
+                        .frame(width: 44)
+                    Text(URL(fileURLWithPath: path).lastPathComponent)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                }
+                QuietButton(title: isCustomImage ? "Change…" : "Choose image…") { chooseImage() }
+            }
+        }
+    }
+
+    private var isCustomImage: Bool {
+        if case .image = style { return true }
+        return false
     }
 
     private func chooseImage() {

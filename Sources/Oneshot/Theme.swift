@@ -86,13 +86,51 @@ struct ChipPicker<Value: Hashable>: View {
     @Binding var selection: Value
 
     var body: some View {
-        HStack(spacing: 6) {
+        // Wraps onto further rows rather than squashing chips in a narrow inspector.
+        FlowLayout(spacing: 6) {
             ForEach(options.indices, id: \.self) { index in
                 let option = options[index]
                 Chip(title: option.1, isSelected: option.0 == selection) {
                     selection = option.0
                 }
             }
+        }
+    }
+}
+
+/// Left-aligned rows that wrap when they run out of width.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: proposal.width ?? widest, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }
@@ -107,6 +145,8 @@ struct Chip: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(isSelected ? Theme.text : Theme.textSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
