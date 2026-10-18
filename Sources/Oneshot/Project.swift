@@ -146,6 +146,16 @@ struct StyleSettings: Codable, Equatable {
     var fadeIn: Double = 0
     var fadeOut: Double = 0
 
+    /// 0 at the very start and end of a video `total` seconds long, rising linearly to 1 across
+    /// the fades (1 throughout when there are none).
+    func fadeProgress(at t: Double, total: Double) -> Double {
+        let (fadeIn, fadeOut) = fadeDurations(total: total)
+        var level = 1.0
+        if fadeIn > 0 { level = min(level, t / fadeIn) }
+        if fadeOut > 0 { level = min(level, (total - t) / fadeOut) }
+        return clamp(level, 0, 1)
+    }
+
     /// The fades for a video `total` seconds long, shortened in proportion if they'd overlap.
     func fadeDurations(total: Double) -> (fadeIn: Double, fadeOut: Double) {
         let fadeIn = max(0, self.fadeIn)

@@ -140,17 +140,31 @@ enum CompositionBuilder {
             let parameters = AVMutableAudioMixInputParameters(track: track)
             let volume = index < volumes.count ? volumes[index] : 1
             if fadeIn > 0 {
-                parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: volume,
-                                         timeRange: CMTimeRange(start: .zero, duration: cmTime(fadeIn)))
+                addFade(to: parameters, from: 0, length: fadeIn, volume: volume, rising: true)
             } else {
                 parameters.setVolume(volume, at: .zero)
             }
-            if fadeOut > 0 {
-                parameters.setVolumeRamp(fromStartVolume: volume, toEndVolume: 0,
-                                         timeRange: CMTimeRange(start: cmTime(duration - fadeOut), duration: cmTime(fadeOut)))
-            }
+            if fadeOut > 0 { addFade(to: parameters, from: duration - fadeOut, length: fadeOut, volume: volume, rising: false) }
             return parameters
         }
         return mix
+    }
+
+    /// AVAudioMix only ramps in straight lines, which sounds abrupt at the quiet end, so the fade is
+    /// built from short ramps along the same eased curve as the picture (squared, as loudness is).
+    private static func addFade(to parameters: AVMutableAudioMixInputParameters, from start: Double,
+                                length: Double, volume: Float, rising: Bool) {
+        let steps = 16
+        func gain(_ i: Int) -> Float {
+            let x = Double(i) / Double(steps)
+            let p = Ease.inOutSine(rising ? x : 1 - x)
+            return volume * Float(p * p)
+        }
+        for i in 0..<steps {
+            let a = start + length * Double(i) / Double(steps)
+            let b = start + length * Double(i + 1) / Double(steps)
+            parameters.setVolumeRamp(fromStartVolume: gain(i), toEndVolume: gain(i + 1),
+                                     timeRange: CMTimeRange(start: cmTime(a), end: cmTime(b)))
+        }
     }
 }

@@ -135,13 +135,12 @@ final class RenderSnapshot: @unchecked Sendable {
         return output
     }
 
-    /// Brightness at an output time: 0 (black) at the very start and end, 1 between the fades.
+    /// Light multiplier at an output time: 0 (black) at the very start and end, 1 between the fades.
+    /// Core Image works in linear light, so the eased perceived brightness is converted to linear;
+    /// a plain linear multiply would hold bright for most of the fade, then drop off a cliff.
     func fadeLevel(at outputTime: Double) -> Double {
-        let (fadeIn, fadeOut) = style.fadeDurations(total: mapping.duration)
-        var level = 1.0
-        if fadeIn > 0 { level = min(level, outputTime / fadeIn) }
-        if fadeOut > 0 { level = min(level, (mapping.duration - outputTime) / fadeOut) }
-        return Ease.inOutCubic(clamp(level, 0, 1))
+        let perceived = Ease.inOutSine(style.fadeProgress(at: outputTime, total: mapping.duration))
+        return pow(perceived, 2.2)
     }
 
     /// Places the recording on the canvas: the same mapping as `sourceToCanvas`, but resized with
