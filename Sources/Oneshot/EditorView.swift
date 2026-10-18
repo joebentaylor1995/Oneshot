@@ -136,7 +136,7 @@ struct EditorView: View {
     private var preview: some View {
         ZStack {
             PlayerSurface(player: model.player)
-                .aspectRatio(model.outputAspect, contentMode: .fit)
+                .aspectRatio(model.previewAspect, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             if !model.isLoaded {
                 ProgressView().controlSize(.small)
@@ -234,7 +234,9 @@ struct PlayerSurface: NSViewRepresentable {
         let view = AVPlayerView()
         view.player = player
         view.controlsStyle = .none
-        view.videoGravity = .resizeAspect
+        // The surface already has the video's aspect; filling it (rather than fitting) means a
+        // sub-pixel rounding difference can't show as black hairlines along the edges.
+        view.videoGravity = .resizeAspectFill
         view.showsFullScreenToggleButton = false
         return view
     }

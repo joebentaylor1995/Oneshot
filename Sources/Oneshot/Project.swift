@@ -141,6 +141,48 @@ struct StyleSettings: Codable, Equatable {
 
     var systemVolume: Double = 1
     var micVolume: Double = 1
+
+    /// Seconds of fade from black at the start and to black at the end (video and audio).
+    var fadeIn: Double = 0
+    var fadeOut: Double = 0
+
+    /// The fades for a video `total` seconds long, shortened in proportion if they'd overlap.
+    func fadeDurations(total: Double) -> (fadeIn: Double, fadeOut: Double) {
+        let fadeIn = max(0, self.fadeIn)
+        let fadeOut = max(0, self.fadeOut)
+        let sum = fadeIn + fadeOut
+        guard sum > total, sum > 0 else { return (fadeIn, fadeOut) }
+        let k = max(0, total) / sum
+        return (fadeIn * k, fadeOut * k)
+    }
+}
+
+extension StyleSettings {
+    /// Settings missing from older edits files keep their defaults instead of failing the whole decode.
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func read<T: Decodable>(_ key: CodingKeys, into value: inout T) {
+            if let decoded = try? c.decodeIfPresent(T.self, forKey: key) { value = decoded }
+        }
+        read(.background, into: &background)
+        read(.padding, into: &padding)
+        read(.cornerRadius, into: &cornerRadius)
+        read(.shadow, into: &shadow)
+        read(.shadowSize, into: &shadowSize)
+        read(.aspect, into: &aspect)
+        read(.showCursor, into: &showCursor)
+        read(.cursorScale, into: &cursorScale)
+        read(.cursorSmoothing, into: &cursorSmoothing)
+        read(.motionBlur, into: &motionBlur)
+        read(.clickEffect, into: &clickEffect)
+        read(.hideIdleCursor, into: &hideIdleCursor)
+        read(.cameraSmoothing, into: &cameraSmoothing)
+        read(.systemVolume, into: &systemVolume)
+        read(.micVolume, into: &micVolume)
+        read(.fadeIn, into: &fadeIn)
+        read(.fadeOut, into: &fadeOut)
+    }
 }
 
 protocol TimedSegment: Identifiable where ID == UUID {

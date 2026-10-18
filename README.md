@@ -17,6 +17,7 @@ This is phase 1 (the core look). Camera, captions, transcript editing and share 
 - Backgrounds: gradients, the macOS wallpapers, a solid colour or your own image
 - Padding, corner radius, shadow strength and size
 - Aspect ratio: Auto, 16:9, 4:3, 1:1, 9:16
+- Fade in and fade out (video and audio, from and to black)
 
 **Cursor**
 - Size (sharp at any size, captured at 4×), smoothing, motion blur

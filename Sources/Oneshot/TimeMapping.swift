@@ -125,17 +125,30 @@ enum CompositionBuilder {
         return composition
     }
 
-    /// Volumes for the system audio and microphone tracks (in that order, as recorded).
+    /// Volumes for the system audio and microphone tracks (in that order, as recorded),
+    /// ramped up and down for the fade in and out.
     static func audioMix(for composition: AVMutableComposition, info: RecordingInfo, style: StyleSettings) -> AVAudioMix? {
         let tracks = composition.tracks(withMediaType: .audio)
         guard !tracks.isEmpty else { return nil }
         var volumes: [Float] = []
         if info.hasSystemAudio { volumes.append(Float(style.systemVolume)) }
         if info.hasMicrophone { volumes.append(Float(style.micVolume)) }
+        let duration = composition.duration.seconds
+        let (fadeIn, fadeOut) = style.fadeDurations(total: duration)
         let mix = AVMutableAudioMix()
         mix.inputParameters = tracks.enumerated().map { index, track in
             let parameters = AVMutableAudioMixInputParameters(track: track)
-            parameters.setVolume(index < volumes.count ? volumes[index] : 1, at: .zero)
+            let volume = index < volumes.count ? volumes[index] : 1
+            if fadeIn > 0 {
+                parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: volume,
+                                         timeRange: CMTimeRange(start: .zero, duration: cmTime(fadeIn)))
+            } else {
+                parameters.setVolume(volume, at: .zero)
+            }
+            if fadeOut > 0 {
+                parameters.setVolumeRamp(fromStartVolume: volume, toEndVolume: 0,
+                                         timeRange: CMTimeRange(start: cmTime(duration - fadeOut), duration: cmTime(fadeOut)))
+            }
             return parameters
         }
         return mix

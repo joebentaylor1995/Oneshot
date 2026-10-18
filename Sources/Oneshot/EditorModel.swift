@@ -223,7 +223,8 @@ final class EditorModel: ObservableObject {
         } else if old.style.aspect != edits.style.aspect {
             Task { await updateVideoComposition() }
         }
-        if old.style.systemVolume != edits.style.systemVolume || old.style.micVolume != edits.style.micVolume {
+        if old.style.systemVolume != edits.style.systemVolume || old.style.micVolume != edits.style.micVolume
+            || old.style.fadeIn != edits.style.fadeIn || old.style.fadeOut != edits.style.fadeOut {
             updateAudioMix()
         }
         if old.style.background != edits.style.background {
@@ -292,6 +293,9 @@ final class EditorModel: ObservableObject {
     }
 
     private var previewSize: CGSize { canvasSize(shortSide: 720) }
+
+    /// The aspect of the frames actually rendered (rounded to even pixels), for the preview surface.
+    var previewAspect: CGFloat { previewSize.width / max(previewSize.height, 1) }
 
     private func rebuildPlayerItem() async {
         buildGeneration += 1
