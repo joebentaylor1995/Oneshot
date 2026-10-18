@@ -42,8 +42,8 @@ final class RenderSnapshot: @unchecked Sendable {
     /// Composes one output frame: background → shadow → rounded screen → click effects → cursor,
     /// all seen through the zoom camera. Every layer is transformed straight from its source,
     /// so zoomed-in text stays as sharp as the recording allows. `outputTime` (after trim, cuts
-    /// and speed-ups) drives the fade in and out.
-    func render(source: CIImage, sourceTime t: Double, outputTime: Double, canvas: CGSize) -> CIImage {
+    /// and speed-ups) drives the fade in and out; nil leaves the fades out.
+    func render(source: CIImage, sourceTime t: Double, outputTime: Double?, canvas: CGSize) -> CIImage {
         let canvasRect = CGRect(origin: .zero, size: canvas)
         let src = source.extent
         guard src.width > 0, src.height > 0, canvas.width > 0, canvas.height > 0 else { return source }
@@ -123,7 +123,7 @@ final class RenderSnapshot: @unchecked Sendable {
                             contentPixels: CGSize(width: content.width * s, height: content.height * s))
         output = output.cropped(to: canvasRect)
 
-        let level = fadeLevel(at: outputTime)
+        let level = outputTime.map { fadeLevel(at: $0) } ?? 1
         if level < 0.999 {
             let k = CGFloat(max(level, 0))
             output = output.applyingFilter("CIColorMatrix", parameters: [
@@ -355,10 +355,21 @@ final class RenderSnapshot: @unchecked Sendable {
 final class RenderState: @unchecked Sendable {
     private let lock = NSLock()
     private var current: RenderSnapshot?
+    private var fades: Bool
+
+    init(showsFades: Bool = true) {
+        fades = showsFades
+    }
 
     var snapshot: RenderSnapshot? {
         get { lock.lock(); defer { lock.unlock() }; return current }
         set { lock.lock(); current = newValue; lock.unlock() }
+    }
+
+    /// Off while the editor is paused, so a still frame at the very start or end isn't just black.
+    var showsFades: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return fades }
+        set { lock.lock(); fades = newValue; lock.unlock() }
     }
 }
 
@@ -374,7 +385,8 @@ enum Compositor {
                 let outputTime = request.compositionTime.seconds
                 let sourceTime = snapshot.mapping.sourceTime(forComposition: outputTime)
                 let image = snapshot.render(source: request.sourceImage, sourceTime: sourceTime,
-                                            outputTime: outputTime, canvas: request.renderSize)
+                                            outputTime: state.showsFades ? outputTime : nil,
+                                            canvas: request.renderSize)
                 request.finish(with: image, context: nil)
             }, completionHandler: { composition, error in
                 if let composition {
