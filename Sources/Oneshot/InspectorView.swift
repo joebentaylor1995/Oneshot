@@ -211,6 +211,22 @@ struct BackgroundInspector: View {
         InspectorSection("Shadow size") {
             ThemedSlider(value: $model.edits.style.shadowSize, range: 0...0.1, defaultValue: defaults.shadowSize)
         }
+        InspectorDivider()
+        InspectorSection("Fade in", trailing: AnyView(secondsLabel(model.edits.style.fadeIn))) {
+            ThemedSlider(value: $model.edits.style.fadeIn, range: 0...3, defaultValue: defaults.fadeIn)
+        }
+        InspectorSection("Fade out", trailing: AnyView(secondsLabel(model.edits.style.fadeOut))) {
+            ThemedSlider(value: $model.edits.style.fadeOut, range: 0...3, defaultValue: defaults.fadeOut)
+            Text("Fades the video and audio from and to black.")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textSecondary)
+        }
+    }
+
+    private func secondsLabel(_ seconds: Double) -> some View {
+        Text(seconds < 0.05 ? "Off" : String(format: "%.1fs", seconds))
+            .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+            .foregroundStyle(Theme.textSecondary)
     }
 
     // MARK: Color

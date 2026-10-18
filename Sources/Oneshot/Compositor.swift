@@ -41,8 +41,9 @@ final class RenderSnapshot: @unchecked Sendable {
 
     /// Composes one output frame: background → shadow → rounded screen → click effects → cursor,
     /// all seen through the zoom camera. Every layer is transformed straight from its source,
-    /// so zoomed-in text stays as sharp as the recording allows.
-    func render(source: CIImage, sourceTime t: Double, canvas: CGSize) -> CIImage {
+    /// so zoomed-in text stays as sharp as the recording allows. `outputTime` (after trim, cuts
+    /// and speed-ups) drives the fade in and out.
+    func render(source: CIImage, sourceTime t: Double, outputTime: Double, canvas: CGSize) -> CIImage {
         let canvasRect = CGRect(origin: .zero, size: canvas)
         let src = source.extent
         guard src.width > 0, src.height > 0, canvas.width > 0, canvas.height > 0 else { return source }
@@ -52,10 +53,24 @@ final class RenderSnapshot: @unchecked Sendable {
         let pad = CGFloat(style.padding) * short
         let available = canvasRect.insetBy(dx: pad, dy: pad)
         let fit = min(available.width / src.width, available.height / src.height)
-        let content = CGRect(x: available.midX - src.width * fit / 2,
+        var content = CGRect(x: available.midX - src.width * fit / 2,
                              y: available.midY - src.height * fit / 2,
                              width: src.width * fit,
                              height: src.height * fit)
+        // The canvas is rounded to even pixels, so a recording that should fill it can come up a
+        // pixel or two short and leave hairlines of background along the edges. Within that
+        // tolerance, stretch it to the edge (an invisible change in aspect).
+        let snap: CGFloat = 2.5
+        if available.width - content.width < snap {
+            content.origin.x = available.minX
+            content.size.width = available.width
+        }
+        if available.height - content.height < snap {
+            content.origin.y = available.minY
+            content.size.height = available.height
+        }
+        let fitX = content.width / src.width
+        let fitY = content.height / src.height
 
         // Camera: scale around the focus point, kept inside the recording where possible.
         let cam = camera.frame(at: t)
@@ -68,7 +83,7 @@ final class RenderSnapshot: @unchecked Sendable {
             .concatenating(CGAffineTransform(scaleX: s, y: s))
 
         let sourceToCanvas = CGAffineTransform(translationX: -src.minX, y: -src.minY)
-            .concatenating(CGAffineTransform(scaleX: fit, y: fit))
+            .concatenating(CGAffineTransform(scaleX: fitX, y: fitY))
             .concatenating(CGAffineTransform(translationX: content.minX, y: content.minY))
             .concatenating(cameraTransform)
 
@@ -90,7 +105,7 @@ final class RenderSnapshot: @unchecked Sendable {
         let frame = content.applying(cameraTransform)
         let radius = baseRadius * s
 
-        let screen = Self.resample(source, scale: fit * s,
+        let screen = Self.resample(source, scaleX: fitX * s, scaleY: fitY * s,
                                    offset: CGPoint(x: (content.minX - originX) * s, y: (content.minY - originY) * s))
         if let mask = Self.roundedRect(frame, radius: radius, color: CIColor(red: 1, green: 1, blue: 1, alpha: 1)) {
             output = screen.applyingFilter("CIBlendWithMask", parameters: [
@@ -102,20 +117,41 @@ final class RenderSnapshot: @unchecked Sendable {
         }
 
         // Canvas pixels per screen point, used to size the cursor and click effects.
-        let pixelsPerPoint = fit * s * CGFloat(info.scale)
+        let pixelsPerPoint = fitX * s * CGFloat(info.scale)
         output = drawClicks(on: output, t: t, point: point, pixelsPerPoint: pixelsPerPoint, short: short)
         output = drawCursor(on: output, t: t, point: point, pixelsPerPoint: pixelsPerPoint,
                             contentPixels: CGSize(width: content.width * s, height: content.height * s))
-        return output.cropped(to: canvasRect)
+        output = output.cropped(to: canvasRect)
+
+        let level = fadeLevel(at: outputTime)
+        if level < 0.999 {
+            let k = CGFloat(max(level, 0))
+            output = output.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: k, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: k, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: k, w: 0),
+            ])
+        }
+        return output
+    }
+
+    /// Brightness at an output time: 0 (black) at the very start and end, 1 between the fades.
+    func fadeLevel(at outputTime: Double) -> Double {
+        let (fadeIn, fadeOut) = style.fadeDurations(total: mapping.duration)
+        var level = 1.0
+        if fadeIn > 0 { level = min(level, outputTime / fadeIn) }
+        if fadeOut > 0 { level = min(level, (mapping.duration - outputTime) / fadeOut) }
+        return Ease.inOutCubic(clamp(level, 0, 1))
     }
 
     /// Places the recording on the canvas: the same mapping as `sourceToCanvas`, but resized with
     /// Lanczos instead of bilinear filtering. When zooming in past the recording's own resolution
     /// (common with 1× displays) it also sharpens a little, so text stays crisp instead of soft.
-    static func resample(_ source: CIImage, scale k: CGFloat, offset: CGPoint) -> CIImage {
+    /// The two scales differ only by the sub-pixel stretch that makes the recording meet the edges.
+    static func resample(_ source: CIImage, scaleX kx: CGFloat, scaleY k: CGFloat, offset: CGPoint) -> CIImage {
         let src = source.extent
         let placed = CGAffineTransform(translationX: offset.x, y: offset.y)
-        guard abs(k - 1) > 0.001 else {
+        guard abs(k - 1) > 0.001 || abs(kx - 1) > 0.001 else {
             return source.transformed(by: CGAffineTransform(translationX: -src.minX + offset.x, y: -src.minY + offset.y))
         }
         // Clamp first so the edges are resampled from real pixels rather than fading to transparent.
@@ -124,7 +160,7 @@ final class RenderSnapshot: @unchecked Sendable {
             .clampedToExtent()
             .applyingFilter("CILanczosScaleTransform", parameters: [
                 kCIInputScaleKey: k,
-                kCIInputAspectRatioKey: 1,
+                kCIInputAspectRatioKey: kx / k,
             ])
         if k > 1.1 {
             image = image.applyingFilter("CISharpenLuminance", parameters: [
@@ -133,7 +169,7 @@ final class RenderSnapshot: @unchecked Sendable {
             ])
         }
         return image
-            .cropped(to: CGRect(x: 0, y: 0, width: src.width * k, height: src.height * k))
+            .cropped(to: CGRect(x: 0, y: 0, width: src.width * kx, height: src.height * k))
             .transformed(by: placed)
     }
 
@@ -335,8 +371,10 @@ enum Compositor {
                     request.finish(with: request.sourceImage, context: nil)
                     return
                 }
-                let sourceTime = snapshot.mapping.sourceTime(forComposition: request.compositionTime.seconds)
-                let image = snapshot.render(source: request.sourceImage, sourceTime: sourceTime, canvas: request.renderSize)
+                let outputTime = request.compositionTime.seconds
+                let sourceTime = snapshot.mapping.sourceTime(forComposition: outputTime)
+                let image = snapshot.render(source: request.sourceImage, sourceTime: sourceTime,
+                                            outputTime: outputTime, canvas: request.renderSize)
                 request.finish(with: image, context: nil)
             }, completionHandler: { composition, error in
                 if let composition {
