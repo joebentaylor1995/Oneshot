@@ -107,7 +107,6 @@ final class EditorModel: ObservableObject {
                 self.isPlaying = false
                 self.stopTicking()
                 self.clock.sourceTime = self.mapping.pieces.last?.sourceEnd ?? self.sourceDuration
-                self.setShowsFades(false)
             }
         }
     }
@@ -379,10 +378,10 @@ final class EditorModel: ObservableObject {
         stopTicking()
         let t = player.currentTime().seconds
         if t.isFinite { clock.sourceTime = mapping.sourceTime(forComposition: t) }
-        setShowsFades(false)
     }
 
-    /// Fades only show while playing (and in exports); a paused frame is shown at full brightness.
+    /// Fades show while playing and stay as they are when playback stops (so a fade out ends on
+    /// black rather than popping back). Scrubbing turns them off, so a still frame isn't black.
     private func setShowsFades(_ shows: Bool) {
         guard renderState.showsFades != shows else { return }
         renderState.showsFades = shows
@@ -423,6 +422,7 @@ final class EditorModel: ObservableObject {
 
     func scrub(toSource time: Double) {
         pause()
+        setShowsFades(false)
         seek(toSource: time)
     }
 

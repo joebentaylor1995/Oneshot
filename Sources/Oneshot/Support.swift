@@ -99,6 +99,11 @@ enum Ease {
         x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2
     }
 
+    /// Gentle at both ends with no flat tails: the curve of a film fade.
+    static func inOutSine(_ x: Double) -> Double {
+        0.5 - 0.5 * cos(.pi * x)
+    }
+
     static func outCubic(_ x: Double) -> Double {
         1 - pow(1 - x, 3)
     }
