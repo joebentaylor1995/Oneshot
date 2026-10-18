@@ -32,7 +32,7 @@ final class EditorModel: ObservableObject {
     let cursorTrack: CursorTrack
     let sourceAsset: AVURLAsset
     let player = AVPlayer()
-    let renderState = RenderState()
+    let renderState = RenderState(showsFades: false)
     let clock = PlaybackClock()
 
     @Published var edits: ProjectEdits {
@@ -107,6 +107,7 @@ final class EditorModel: ObservableObject {
                 self.isPlaying = false
                 self.stopTicking()
                 self.clock.sourceTime = self.mapping.pieces.last?.sourceEnd ?? self.sourceDuration
+                self.setShowsFades(false)
             }
         }
     }
@@ -366,6 +367,7 @@ final class EditorModel: ObservableObject {
         if outputTime >= outputDuration - 0.05 {
             seek(toSource: mapping.pieces.first?.sourceStart ?? 0)
         }
+        renderState.showsFades = true
         player.playImmediately(atRate: 1)
         isPlaying = true
         startTicking()
@@ -377,6 +379,14 @@ final class EditorModel: ObservableObject {
         stopTicking()
         let t = player.currentTime().seconds
         if t.isFinite { clock.sourceTime = mapping.sourceTime(forComposition: t) }
+        setShowsFades(false)
+    }
+
+    /// Fades only show while playing (and in exports); a paused frame is shown at full brightness.
+    private func setShowsFades(_ shows: Bool) {
+        guard renderState.showsFades != shows else { return }
+        renderState.showsFades = shows
+        refreshPausedFrame()
     }
 
     func seek(toSource time: Double) {
