@@ -306,6 +306,9 @@ final class EditorModel: ObservableObject {
             guard generation == buildGeneration else { return }
             let item = AVPlayerItem(asset: built)
             item.videoComposition = videoComposition
+            // Each seek completes only once its frame is rendered, so chasing seeks while
+            // scrubbing show every step instead of being superseded before anything draws.
+            item.seekingWaitsForVideoCompositionRendering = true
             item.audioMix = CompositionBuilder.audioMix(for: built, info: info, style: edits.style)
             item.audioTimePitchAlgorithm = .spectral
             composition = built
