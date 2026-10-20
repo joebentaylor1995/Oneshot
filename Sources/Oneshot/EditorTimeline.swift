@@ -36,6 +36,7 @@ struct EditorTimeline: View {
                 audioTrack(width: width, pps: pps)
                     .frame(width: width, height: audioHeight)
             }
+            .coordinateSpace(name: Self.tracksSpace)
             .padding(.horizontal, inset)
             .padding(.top, 4)
             .overlay(alignment: .topLeading) {
@@ -74,8 +75,12 @@ struct EditorTimeline: View {
         .gesture(scrubGesture(pps: pps))
     }
 
+    /// Scrub positions are measured from the start of the tracks, not from whichever view was
+    /// grabbed: the clip is offset by the trim, so its own coordinates start at the trim point.
+    static let tracksSpace = "timelineTracks"
+
     private func scrubGesture(pps: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.tracksSpace))
             .onChanged { value in
                 model.scrub(toSource: Double(value.location.x / pps))
             }
@@ -221,7 +226,7 @@ extension EditorTimeline {
         }
         .contentShape(Rectangle())
         .gesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.tracksSpace))
                 .onChanged { value in model.scrub(toSource: Double(value.location.x / pps)) }
         )
         .help("Audio")
